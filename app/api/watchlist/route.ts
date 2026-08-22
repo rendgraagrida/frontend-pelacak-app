@@ -126,3 +126,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Gagal memproses permintaan" }, { status: 500 });
   }
 }
+
+// ==========================================
+// ENDPOINT DELETE: MENGHAPUS TARGET DOMPET
+// ==========================================
+export async function DELETE(request: Request) {
+  try {
+    const { wallet_address, chain_network } = await request.json();
+
+    if (!wallet_address || !chain_network) {
+      return NextResponse.json({ error: "Data tidak lengkap" }, { status: 400 });
+    }
+
+    const { error } = await supabase
+      .from('watchlist')
+      .delete()
+      .eq('wallet_address', wallet_address)
+      .eq('chain_network', chain_network);
+
+    if (error) throw error;
+
+    return NextResponse.json({ message: "Target berhasil dihapus" }, { status: 200 });
+  } catch (error: any) {
+    console.error("❌ [Backend API Error]:", error);
+    return NextResponse.json({ error: "Gagal menghapus data" }, { status: 500 });
+  }
+}
