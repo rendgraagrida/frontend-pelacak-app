@@ -1,8 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, Fragment } from 'react';
+import React, { useState, useEffect, Fragment, useRef } from 'react';
 import axios from 'axios';
-import { Terminal, Plus, X, ChevronDown, ChevronUp, Loader2, Copy, Check, ExternalLink } from 'lucide-react';
+import { 
+  LayoutGrid, ShieldCheck, Plus, X, ChevronDown, ChevronUp, 
+  Loader2, Copy, Check, ExternalLink, Wallet, Trash2, ArrowUpDown, Filter
+} from 'lucide-react';
 
 interface WalletItem {
   id?: number;
@@ -21,69 +24,137 @@ interface TokenItem {
   total_value_usd?: number;
 }
 
+interface WhitelistItem {
+  contract_address: string;
+  label: string;
+}
+
 export default function Dashboard() {
+  const [activeTab, setActiveTab] = useState<'watchlist' | 'whitelist'>('watchlist');
+
+  // ==========================================
+  // STATE: WATCHLIST TARGETS
+  // ==========================================
   const [wallets, setWallets] = useState<WalletItem[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newWallet, setNewWallet] = useState('');
-  const [newNetwork, setNewNetwork] = useState('Ethereum');
+  const [newNetwork, setNewNetwork] = useState('EVM (ETH/BSC/RH)');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // ==========================================
+  // STATE: FILTER & SORTING
+  // ==========================================
+  const [networkFilter, setNetworkFilter] = useState('All');
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'net_worth', direction: 'desc' });
+
+  // ==========================================
+  // STATE: TOKEN EXPANSION & BACKGROUND SYNC
+  // ==========================================
   const [expandedWallet, setExpandedWallet] = useState<string | null>(null);
   const [walletTokens, setWalletTokens] = useState<Record<string, TokenItem[]>>({});
   const [loadingTokens, setLoadingTokens] = useState<Record<string, boolean>>({});
-  
   const [walletPages, setWalletPages] = useState<Record<string, number>>({});
   const [walletHasNext, setWalletHasNext] = useState<Record<string, boolean>>({});
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
 
+  // Mencegah looping berulang saat auto-sync
+  const isSyncing = useRef(false);
+
+  // ==========================================
+  // STATE: WHITELIST
+  // ==========================================
+  const [whitelist, setWhitelist] = useState<WhitelistItem[]>([]);
+  const [newWlAddress, setNewWlAddress] = useState('');
+  const [newWlLabel, setNewWlLabel] = useState('');
+  const [isWlSubmitting, setIsWlSubmitting] = useState(false);
+
+  // ==========================================
+  // INITIALIZATION (FETCH DATA)
+  // ==========================================
   const fetchWatchlist = async () => {
     try {
       setLoading(true);
       const response = await axios.get('/api/watchlist');
       setWallets(response.data);
     } catch (error) {
-      console.error("Gagal mengambil data:", error);
+      console.error("Gagal mengambil data watchlist:", error); // ✅ SOLUSI
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchWhitelist = async () => {
+    try {
+      const response = await axios.get('/api/whitelist');
+      setWhitelist(response.data);
+    } catch (error) {
+      console.error("Gagal mengambil data whitelist:", error); // ✅ SOLUSI
+    }
+  };
+
   useEffect(() => {
     fetchWatchlist();
+    fetchWhitelist();
   }, []);
 
-  const fetchTokens = async (walletAddress: string, chainNetwork: string, page: number) => {
+  // ==========================================
+  // 🔴 BACKGROUND DATA MINER (AUTO-SYNC NET WORTH)
+  // ==========================================
+  const fetchTokensQuietly = async (walletAddress: string, chainNetwork: string) => {
     const memoryKey = `${walletAddress}-${chainNetwork}`;
-
     try {
       setLoadingTokens((prev) => ({ ...prev, [memoryKey]: true }));
       const response = await axios.post('/api/tokens', {
         wallet_address: walletAddress,
         chain_network: chainNetwork,
-        page: Number(page)
+        page: 1
       });
       
       const newTokens = response.data.tokens;
       const hasNext = response.data.hasNextPage;
 
-      setWalletTokens((prev) => {
-        if (page === 1) return { ...prev, [memoryKey]: newTokens };
-        const existing = prev[memoryKey] || [];
-        return { ...prev, [memoryKey]: [...existing, ...newTokens] };
-      });
-
+      setWalletTokens((prev) => ({ ...prev, [memoryKey]: newTokens }));
       setWalletHasNext((prev) => ({ ...prev, [memoryKey]: hasNext }));
-      setWalletPages((prev) => ({ ...prev, [memoryKey]: page }));
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.error || error.message;
-      alert(`[ERROR] Gagal memuat halaman ${page}: ${errorMsg}`);
+      setWalletPages((prev) => ({ ...prev, [memoryKey]: 1 }));
+    } catch (error) {
+      console.error(`Gagal sync ${memoryKey}`);
     } finally {
       setLoadingTokens((prev) => ({ ...prev, [memoryKey]: false }));
     }
   };
 
+  useEffect(() => {
+    if (wallets.length === 0 || isSyncing.current) return;
+    
+    const runBackgroundSync = async () => {
+      isSyncing.current = true;
+      for (const wallet of wallets) {
+        const safeNet = wallet.chain_network.toUpperCase();
+        const isSupported = ['ETHEREUM', 'BASE CHAIN', 'BSC'].includes(safeNet) || safeNet.includes('EVM');
+        
+        if (!isSupported) continue;
+
+        const memoryKey = `${wallet.wallet_address}-${wallet.chain_network}`;
+        // Hanya sync jika belum ada data dan tidak sedang loading
+        if (!walletTokens[memoryKey]) {
+          await fetchTokensQuietly(wallet.wallet_address, wallet.chain_network);
+          // 🔴 GUARDRAIL: Jeda 500ms agar Vercel/Moralis tidak Crash (Rate Limit)
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      isSyncing.current = false;
+    };
+
+    runBackgroundSync();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallets]);
+
+
+  // ==========================================
+  // HANDLERS: TOKENS & UI
+  // ==========================================
   const handleToggleTokens = async (walletAddress: string, chainNetwork: string) => {
     const memoryKey = `${walletAddress}-${chainNetwork}`;
     if (expandedWallet === memoryKey) {
@@ -91,25 +162,41 @@ export default function Dashboard() {
       return;
     }
     setExpandedWallet(memoryKey);
-    
-    // Toleransi huruf kapital untuk keamanan pencegahan bug
-    const safeNet = chainNetwork.toUpperCase();
-    if (!['ETHEREUM', 'BASE CHAIN', 'BSC'].includes(safeNet) && !safeNet.includes('EVM')) return;
-    
-    if (!walletTokens[memoryKey]) {
-      await fetchTokens(walletAddress, chainNetwork, 1);
+    // Jika data belum tersinkronisasi, tarik paksa
+    if (!walletTokens[memoryKey] && !loadingTokens[memoryKey]) {
+      await fetchTokensQuietly(walletAddress, chainNetwork);
     }
   };
 
   const handleLoadMore = async (walletAddress: string, chainNetwork: string) => {
     const memoryKey = `${walletAddress}-${chainNetwork}`;
     const currentPage = walletPages[memoryKey] || 1;
-    await fetchTokens(walletAddress, chainNetwork, currentPage + 1);
+    const nextPage = currentPage + 1;
+    
+    try {
+      setLoadingTokens((prev) => ({ ...prev, [memoryKey]: true }));
+      const response = await axios.post('/api/tokens', {
+        wallet_address: walletAddress,
+        chain_network: chainNetwork,
+        page: nextPage
+      });
+      const newTokens = response.data.tokens;
+      setWalletTokens((prev) => ({ ...prev, [memoryKey]: [...(prev[memoryKey] || []), ...newTokens] }));
+      setWalletHasNext((prev) => ({ ...prev, [memoryKey]: response.data.hasNextPage }));
+      setWalletPages((prev) => ({ ...prev, [memoryKey]: nextPage }));
+    } catch (e) {
+      alert("Gagal memuat halaman berikutnya.");
+    } finally {
+      setLoadingTokens((prev) => ({ ...prev, [memoryKey]: false }));
+    }
   };
 
+  // ==========================================
+  // HANDLERS: WATCHLIST CRUD
+  // ==========================================
   const handleAddWallet = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newWallet) return alert("[ERROR] Alamat tidak boleh kosong!");
+    if (!newWallet) return alert("Alamat tidak boleh kosong!");
     try {
       setIsSubmitting(true);
       await axios.post('/api/watchlist', { wallet_address: newWallet, chain_network: newNetwork });
@@ -117,7 +204,7 @@ export default function Dashboard() {
       setNewWallet('');
       fetchWatchlist(); 
     } catch (error: any) {
-      alert(error.response?.data?.error || "[ERROR] Gagal menambahkan target");
+      alert(error.response?.data?.error || "Gagal menambahkan target");
     } finally {
       setIsSubmitting(false);
     }
@@ -125,7 +212,7 @@ export default function Dashboard() {
 
   const handleDeleteWallet = async (walletAddress: string, chainNetwork: string) => {
     const memoryKey = `${walletAddress}-${chainNetwork}`;
-    if (!confirm(`[WARNING] Hapus target ${walletAddress.slice(0,6)}... dari database?`)) return;
+    if (!confirm(`Hapus target ${walletAddress.slice(0,6)}... dari database?`)) return;
     try {
       await axios.delete('/api/watchlist', {
         data: { wallet_address: walletAddress, chain_network: chainNetwork }
@@ -133,265 +220,520 @@ export default function Dashboard() {
       if (expandedWallet === memoryKey) setExpandedWallet(null);
       fetchWatchlist();
     } catch (error: any) {
-      alert("[ERROR] Eksekusi penghapusan gagal.");
+      alert("Eksekusi penghapusan gagal.");
     }
   };
 
-  const handleCopy = (address: string) => {
-    navigator.clipboard.writeText(address);
-    setCopiedAddress(address);
+  // ==========================================
+  // HANDLERS: WHITELIST
+  // ==========================================
+  const handleAddWhitelist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newWlAddress || !newWlLabel) return;
+    try {
+      setIsWlSubmitting(true);
+      await axios.post('/api/whitelist', { contract_address: newWlAddress, label: newWlLabel });
+      setNewWlAddress('');
+      setNewWlLabel('');
+      fetchWhitelist();
+    } catch (error: any) {
+      alert(error.response?.data?.error || "Gagal menambahkan ke whitelist");
+    } finally {
+      setIsWlSubmitting(false);
+    }
+  };
+
+  const handleRemoveWhitelist = async (contract_address: string) => {
+    if (!confirm(`Hapus ${contract_address.slice(0,6)}... dari whitelist?`)) return;
+    try {
+      await axios.delete('/api/whitelist', { data: { contract_address } });
+      fetchWhitelist();
+    } catch (error) {
+      alert("Gagal menghapus token dari whitelist");
+    }
+  };
+
+  // ==========================================
+  // UTILITIES & DATA PROCESSING
+  // ==========================================
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedAddress(text);
     setTimeout(() => setCopiedAddress(null), 2000);
   };
 
-  // FUNGSI TAUTAN FORENSIK CERDAS
   const getExplorerUrl = (network: string, tokenAddress: string, walletAddress: string) => {
     const net = network.toUpperCase();
     let baseUrl = 'https://etherscan.io';
-    
     if (net === 'BASE CHAIN') baseUrl = 'https://basescan.org';
     else if (net === 'BSC') baseUrl = 'https://bscscan.com';
-
-    if (tokenAddress === 'NATIVE_COIN') {
-      return `${baseUrl}/address/${walletAddress}`;
-    }
+    if (tokenAddress === 'NATIVE_COIN') return `${baseUrl}/address/${walletAddress}`;
     return `${baseUrl}/token/${tokenAddress}?a=${walletAddress}`;
   };
 
-  return (
-    <div className="min-h-screen bg-black text-green-500 font-mono p-6 sm:p-10 selection:bg-green-500 selection:text-black">
-      {/* Efek CRT Scanline */}
-      <div className="pointer-events-none fixed inset-0 z-50 opacity-10 bg-[linear-gradient(rgba(0,255,65,0.1)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]"></div>
+  const getNetWorth = (walletAddress: string, chainNetwork: string) => {
+    const memoryKey = `${walletAddress}-${chainNetwork}`;
+    const tokens = walletTokens[memoryKey];
+    if (!tokens) return null; // Belum di-scan
+    return tokens.reduce((sum, token) => sum + (token.total_value_usd || 0), 0);
+  };
 
-      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 border-b border-green-500 pb-4 gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-3 uppercase tracking-widest text-green-400 drop-shadow-[0_0_5px_rgba(0,255,65,0.5)]">
-            <Terminal className="text-green-500" />
-            SYS.TRACKING_WALLET <span className="animate-pulse">_</span>
-          </h1>
-          <p className="text-xs text-green-700 mt-1 uppercase">Connection: Secured | Status: Active</p>
+  const handleSort = (key: string) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
+    }));
+  };
+
+  // Menggabungkan Filter dan Sort
+  const filteredWallets = wallets.filter(w => networkFilter === 'All' || w.chain_network === networkFilter);
+  const sortedWallets = [...filteredWallets].sort((a, b) => {
+    let valA: any = 0;
+    let valB: any = 0;
+
+    if (sortConfig.key === 'wallet_address') {
+      valA = a.wallet_address.toLowerCase();
+      valB = b.wallet_address.toLowerCase();
+    } else if (sortConfig.key === 'chain_network') {
+      valA = a.chain_network.toLowerCase();
+      valB = b.chain_network.toLowerCase();
+    } else if (sortConfig.key === 'net_worth') {
+      valA = getNetWorth(a.wallet_address, a.chain_network) ?? -1; 
+      valB = getNetWorth(b.wallet_address, b.chain_network) ?? -1;
+    }
+
+    if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
+      
+      {/* HEADER & NAVIGATION */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-600 p-2 rounded-lg">
+                <Wallet className="text-white" size={20} />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-slate-900 leading-tight">Portfolio Tracker</h1>
+                <p className="text-xs text-slate-500 font-medium">Enterprise Web3 Intelligence</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg border border-slate-200">
+              <button 
+                onClick={() => setActiveTab('watchlist')}
+                className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all flex items-center gap-2 ${activeTab === 'watchlist' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                <LayoutGrid size={16} /> Targets
+              </button>
+              <button 
+                onClick={() => setActiveTab('whitelist')}
+                className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all flex items-center gap-2 ${activeTab === 'whitelist' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                <ShieldCheck size={16} /> Whitelist
+              </button>
+            </div>
+          </div>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="border border-green-500 text-green-500 hover:bg-green-500 hover:text-black px-4 py-2 flex items-center gap-2 transition-colors uppercase text-sm font-bold tracking-wider"
-        >
-          <Plus size={16} />
-          [ ADD_TARGET ]
-        </button>
       </header>
 
-      <main>
-        <div className="border border-green-800 bg-black p-1">
-          <div className="border border-green-900 p-4">
-            <h2 className="text-sm font-bold mb-4 uppercase tracking-widest text-green-600 border-b border-green-900 pb-2">
-              &gt; ACTIVE_WATCHLIST_TARGETS
-            </h2>
-            
-            {loading ? (
-              <p className="text-green-700 animate-pulse text-sm">&gt; Initializing database scan...</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead>
-                    <tr className="text-green-700 border-b border-green-900">
-                      <th className="pb-2 font-normal">[ ADDRESS ]</th>
-                      <th className="pb-2 font-normal">[ NET ]</th>
-                      <th className="pb-2 text-right font-normal">[ BALANCE ]</th>
-                      <th className="pb-2 text-center font-normal">[ EXE ]</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {wallets.length === 0 ? (
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        {/* =========================================
+            TAB 1: WATCHLIST (TARGET WALLETS)
+            ========================================= */}
+        {activeTab === 'watchlist' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <h2 className="text-xl font-bold text-slate-900">Active Watchlist</h2>
+              
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
+                  <Filter size={16} className="text-slate-400" />
+                  <select 
+                    value={networkFilter}
+                    onChange={(e) => setNetworkFilter(e.target.value)}
+                    className="bg-transparent text-sm font-semibold text-slate-700 outline-none cursor-pointer"
+                  >
+                    <option value="All">All Networks</option>
+                    <option value="Ethereum">Ethereum</option>
+                    <option value="BSC">BSC</option>
+                    <option value="Base Chain">Base Chain</option>
+                    <option value="Solana">Solana</option>
+                  </select>
+                </div>
+
+                <button 
+                  onClick={() => setIsModalOpen(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors text-sm font-semibold shadow-sm w-full sm:w-auto justify-center"
+                >
+                  <Plus size={16} /> Add Target
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              {loading ? (
+                <div className="p-10 flex flex-col items-center justify-center text-slate-500">
+                  <Loader2 className="animate-spin mb-2" size={24} />
+                  <p className="text-sm font-medium">Loading database...</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm whitespace-nowrap">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
                       <tr>
-                        <td colSpan={4} className="py-6 text-center text-green-900">
-                          NO_TARGETS_FOUND
-                        </td>
+                        <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition-colors group" onClick={() => handleSort('wallet_address')}>
+                          <div className="flex items-center gap-1.5">
+                            Wallet Address 
+                            <ArrowUpDown size={14} className={sortConfig.key === 'wallet_address' ? 'text-blue-600' : 'text-slate-300 group-hover:text-slate-500'} />
+                          </div>
+                        </th>
+                        <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition-colors group" onClick={() => handleSort('chain_network')}>
+                          <div className="flex items-center gap-1.5">
+                            Network 
+                            <ArrowUpDown size={14} className={sortConfig.key === 'chain_network' ? 'text-blue-600' : 'text-slate-300 group-hover:text-slate-500'} />
+                          </div>
+                        </th>
+                        <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition-colors group text-right" onClick={() => handleSort('net_worth')}>
+                          <div className="flex items-center justify-end gap-1.5">
+                            Total Net Worth (USD) 
+                            <ArrowUpDown size={14} className={sortConfig.key === 'net_worth' ? 'text-blue-600' : 'text-slate-300 group-hover:text-slate-500'} />
+                          </div>
+                        </th>
+                        <th className="px-6 py-4 text-center">Actions</th>
                       </tr>
-                    ) : (
-                      wallets.map((wallet, index) => {
-                        const memoryKey = `${wallet.wallet_address}-${wallet.chain_network}`;
-                        const isExpanded = expandedWallet === memoryKey;
-                        const safeNet = wallet.chain_network.toUpperCase();
-                        const isSupported = ['ETHEREUM', 'BASE CHAIN', 'BSC'].includes(safeNet) || safeNet.includes('EVM');
-                        const isLoadingToken = loadingTokens[memoryKey];
-                        const tokens = walletTokens[memoryKey] || [];
-                        const hasNext = walletHasNext[memoryKey];
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {sortedWallets.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-10 text-center text-slate-500 font-medium">
+                            No targets found for the selected filter.
+                          </td>
+                        </tr>
+                      ) : (
+                        sortedWallets.map((wallet, index) => {
+                          const memoryKey = `${wallet.wallet_address}-${wallet.chain_network}`;
+                          const isExpanded = expandedWallet === memoryKey;
+                          const safeNet = wallet.chain_network.toUpperCase();
+                          const isSupported = ['ETHEREUM', 'BASE CHAIN', 'BSC'].includes(safeNet) || safeNet.includes('EVM');
+                          
+                          const isLoadingToken = loadingTokens[memoryKey];
+                          const tokens = walletTokens[memoryKey] || [];
+                          const netWorth = getNetWorth(wallet.wallet_address, wallet.chain_network);
 
-                        return (
-                          <Fragment key={index}>
-                            <tr className={`border-b border-green-950 transition-colors ${isExpanded ? 'bg-green-950/20' : 'hover:bg-green-950/10'}`}>
-                              <td className="py-3 text-green-400">
-                                {wallet.wallet_address}
-                              </td>
-                              <td className="py-3 uppercase text-green-600 text-xs">
-                                {wallet.chain_network}
-                              </td>
-                              <td className="py-3 text-right font-bold text-green-300">
-                                {wallet.balance === "Error RPC" ? "ERR_RPC" : wallet.balance ? parseFloat(wallet.balance).toFixed(4) : "0.0000"}
-                              </td>
-                              <td className="py-3 text-center flex items-center justify-center gap-2">
-                                {isSupported ? (
-                                  <button
-                                    onClick={() => handleToggleTokens(wallet.wallet_address, wallet.chain_network)}
-                                    className="inline-flex items-center gap-1 text-xs border border-green-800 hover:bg-green-500 hover:text-black px-2 py-1 transition-colors"
-                                  >
-                                    SCAN {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                                  </button>
-                                ) : (
-                                  <span className="text-xs text-green-900 mr-2">N/A</span>
-                                )}
+                          return (
+                            <Fragment key={`${memoryKey}-${index}`}>
+                              <tr className={`transition-colors ${isExpanded ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}>
+                                <td className="px-6 py-4">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-slate-700">{wallet.wallet_address}</span>
+                                    <button 
+                                      onClick={() => handleCopy(wallet.wallet_address)} 
+                                      className="text-slate-400 hover:text-blue-600 transition-colors"
+                                      title="Copy Address"
+                                    >
+                                      {copiedAddress === wallet.wallet_address ? <Check size={14} className="text-green-600"/> : <Copy size={14} />}
+                                    </button>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200">
+                                    {wallet.chain_network}
+                                  </span>
+                                </td>
                                 
-                                <button
-                                  onClick={() => handleDeleteWallet(wallet.wallet_address, wallet.chain_network)}
-                                  className="inline-flex items-center text-xs border border-red-900 text-red-600 hover:bg-red-600 hover:text-black px-2 py-1 transition-colors"
-                                  title="Delete Target"
-                                >
-                                  [ DEL ]
-                                </button>
-                              </td>
-                            </tr>
-
-                            {isExpanded && (
-                              <tr className="bg-black">
-                                <td colSpan={4} className="p-0 border-b border-green-900">
-                                  <div className="p-4 border-l-2 border-green-500 ml-4 my-4 bg-green-950/5">
-                                    <h4 className="text-xs font-bold text-green-600 mb-4 uppercase tracking-widest">
-                                      &gt;&gt; EXTRACTED_TOKENS ({wallet.chain_network})
-                                    </h4>
-
-                                    {tokens.length === 0 && !isLoadingToken ? (
-                                      <p className="text-xs text-green-800">NO_ASSETS_FOUND.</p>
-                                    ) : (
-                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                        {tokens.map((token, tIdx) => (
-                                          <div key={`${token.contract_address}-${tIdx}`} className={`p-3 border ${token.contract_address === 'NATIVE_COIN' ? 'border-green-400 bg-green-900/10' : 'border-green-900 bg-black'} hover:border-green-500 transition-colors group`}>
-                                            <div className="flex justify-between items-start mb-2">
-                                              <div>
-                                                <p className="text-sm font-bold text-green-400 group-hover:text-green-300">
-                                                  {token.symbol} {token.contract_address === 'NATIVE_COIN' && <span className="text-[10px] bg-green-900 text-black px-1 ml-1">CORE</span>}
-                                                </p>
-                                                
-                                                <div className="flex items-center gap-2 mt-1">
-                                                  {token.contract_address !== 'NATIVE_COIN' ? (
-                                                    <button 
-                                                      onClick={() => handleCopy(token.contract_address)}
-                                                      className="text-[10px] text-green-700 hover:text-black hover:bg-green-500 flex items-center gap-1 border border-green-900 px-1 transition-colors"
-                                                      title="Copy Address"
-                                                    >
-                                                      {token.contract_address.slice(0, 6)}...{token.contract_address.slice(-4)}
-                                                      {copiedAddress === token.contract_address ? <Check size={10} /> : <Copy size={10} />}
-                                                    </button>
-                                                  ) : (
-                                                    <span className="text-[10px] text-green-700 border border-green-900 px-1">NATIVE_ASSET</span>
-                                                  )}
-                                                  
-                                                  {/* TOMBOL FORENSIK TERBARU */}
-                                                  <button
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      window.open(getExplorerUrl(wallet.chain_network, token.contract_address, wallet.wallet_address), '_blank');
-                                                    }}
-                                                    className="text-green-700 hover:text-green-400 transition-colors"
-                                                    title="Validasi Forensik di Block Explorer"
-                                                  >
-                                                    <ExternalLink size={12} />
-                                                  </button>
-                                                </div>
-
-                                              </div>
-                                              <div className="text-right">
-                                                <p className="text-sm font-bold text-green-300">
-                                                  {token.total_value_usd && token.total_value_usd > 0 ? `$${token.total_value_usd.toFixed(2)}` : '$0.00'}
-                                                </p>
-                                              </div>
-                                            </div>
-                                            <div className="flex justify-between text-[10px] text-green-700 border-t border-green-900/50 pt-2 mt-2">
-                                              <span>QTY: {token.balance}</span>
-                                              <span>{token.price_usd && token.price_usd > 0 ? `@ $${token.price_usd.toFixed(2)}` : 'UNKNOWN_VAL'}</span>
-                                            </div>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-
-                                    <div className="mt-4 flex items-center gap-4">
-                                      {isLoadingToken ? (
-                                        <div className="flex items-center gap-2 text-xs text-green-500 animate-pulse">
-                                          <Loader2 size={14} className="animate-spin" />
-                                          DOWNLOADING_BLOCKCHAIN_DATA...
-                                        </div>
-                                      ) : hasNext ? (
-                                        <button 
-                                          onClick={() => handleLoadMore(wallet.wallet_address, wallet.chain_network)}
-                                          className="text-xs border border-green-700 text-green-600 hover:bg-green-700 hover:text-black px-3 py-1 uppercase transition-colors"
-                                        >
-                                          [ LOAD_PAGE_{walletPages[memoryKey] + 1} ]
-                                        </button>
-                                      ) : tokens.length > 0 && (
-                                        <span className="text-xs text-green-900">EOF (END_OF_FILE).</span>
-                                      )}
+                                {/* 🔴 KOLOM NET WORTH AUTO-SYNC */}
+                                <td className="px-6 py-4 text-right">
+                                  {isLoadingToken && netWorth === null ? (
+                                    <div className="flex items-center justify-end gap-2 text-slate-400 text-xs italic">
+                                      <Loader2 size={12} className="animate-spin" /> Syncing...
                                     </div>
+                                  ) : netWorth !== null ? (
+                                    <span className="font-bold text-slate-900 text-base">
+                                      {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(netWorth)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-slate-400 italic">Unscanned</span>
+                                  )}
+                                </td>
+
+                                <td className="px-6 py-4 text-center">
+                                  <div className="flex items-center justify-center gap-2">
+                                    {isSupported ? (
+                                      <button
+                                        onClick={() => handleToggleTokens(wallet.wallet_address, wallet.chain_network)}
+                                        className={`inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${isExpanded ? 'bg-blue-100 text-blue-700' : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600'}`}
+                                      >
+                                        Inspect {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                      </button>
+                                    ) : (
+                                      <span className="text-xs text-slate-400 font-medium px-3">Unsupported</span>
+                                    )}
+                                    <button
+                                      onClick={() => handleDeleteWallet(wallet.wallet_address, wallet.chain_network)}
+                                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                      title="Remove Target"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
                                   </div>
                                 </td>
                               </tr>
-                            )}
-                          </Fragment>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
+
+                              {/* TOKEN EXPANSION PANEL */}
+                              {isExpanded && (
+                                <tr>
+                                  <td colSpan={4} className="p-0 border-b border-slate-200">
+                                    <div className="bg-slate-50 p-6 border-l-4 border-blue-500 shadow-inner">
+                                      
+                                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                                        <div>
+                                          <h4 className="text-sm font-bold text-slate-800">Extracted Assets</h4>
+                                          <p className="text-xs text-slate-500 font-mono mt-1">{wallet.wallet_address}</p>
+                                        </div>
+                                      </div>
+
+                                      {tokens.length === 0 && !isLoadingToken ? (
+                                        <div className="text-center py-8 bg-white rounded-lg border border-slate-200">
+                                          <p className="text-sm text-slate-500 font-medium">No assets found in this wallet.</p>
+                                        </div>
+                                      ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                          {tokens.map((token, tIdx) => (
+                                            <div key={`${token.contract_address}-${tIdx}`} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all">
+                                              <div className="flex justify-between items-start mb-3">
+                                                <div>
+                                                  <h5 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                                    {token.symbol} 
+                                                    {token.contract_address === 'NATIVE_COIN' && (
+                                                      <span className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.5 rounded font-bold">CORE</span>
+                                                    )}
+                                                  </h5>
+                                                  <div className="flex items-center gap-2 mt-1">
+                                                    {token.contract_address !== 'NATIVE_COIN' ? (
+                                                      <button 
+                                                        onClick={() => handleCopy(token.contract_address)}
+                                                        className="text-[11px] font-mono text-slate-500 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 px-1.5 py-0.5 rounded border border-slate-100 transition-colors flex items-center gap-1"
+                                                      >
+                                                        {token.contract_address.slice(0, 6)}...{token.contract_address.slice(-4)}
+                                                        {copiedAddress === token.contract_address ? <Check size={10} className="text-green-600"/> : <Copy size={10} />}
+                                                      </button>
+                                                    ) : (
+                                                      <span className="text-[11px] font-mono text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">NATIVE_ASSET</span>
+                                                    )}
+                                                    <button
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        window.open(getExplorerUrl(wallet.chain_network, token.contract_address, wallet.wallet_address), '_blank');
+                                                      }}
+                                                      className="text-slate-400 hover:text-blue-600 transition-colors"
+                                                      title="View on Explorer"
+                                                    >
+                                                      <ExternalLink size={12} />
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                                <div className="text-right">
+                                                  <p className="text-sm font-bold text-slate-900">
+                                                    {token.total_value_usd && token.total_value_usd > 0 ? `$${token.total_value_usd.toFixed(2)}` : '$0.00'}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                              <div className="flex justify-between items-center text-xs text-slate-500 border-t border-slate-100 pt-3">
+                                                <span className="font-medium">Qty: {token.balance}</span>
+                                                <span>{token.price_usd && token.price_usd > 0 ? `@ $${token.price_usd.toFixed(2)}` : 'Unknown Price'}</span>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      <div className="mt-6 flex items-center justify-center">
+                                        {isLoadingToken ? (
+                                          <div className="flex items-center gap-2 text-sm text-blue-600 font-medium">
+                                            <Loader2 size={16} className="animate-spin" /> Fetching more records...
+                                          </div>
+                                        ) : walletHasNext[memoryKey] ? (
+                                          <button 
+                                            onClick={() => handleLoadMore(wallet.wallet_address, wallet.chain_network)}
+                                            className="text-sm font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 px-6 py-2 rounded-lg shadow-sm transition-all"
+                                          >
+                                            Load More Assets
+                                          </button>
+                                        ) : tokens.length > 0 && (
+                                          <span className="text-xs text-slate-400 font-medium">End of available assets</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* TAB 2: WHITELIST */}
+        {activeTab === 'whitelist' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">Whitelist Configuration</h2>
+              <p className="text-sm text-slate-500 mt-1">Tokens added here will bypass the absolute Zero-Trust scam filters.</p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-1">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                  <h3 className="text-sm font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">Add New Token</h3>
+                  <form onSubmit={handleAddWhitelist} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">Contract Address</label>
+                      <input 
+                        type="text" 
+                        value={newWlAddress}
+                        onChange={(e) => setNewWlAddress(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm font-mono"
+                        placeholder="0x..."
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">Token Label / Project Name</label>
+                      <input 
+                        type="text" 
+                        value={newWlLabel}
+                        onChange={(e) => setNewWlLabel(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm"
+                        placeholder="e.g. IDOS Token"
+                        required
+                      />
+                    </div>
+                    <button 
+                      type="submit" 
+                      disabled={isWlSubmitting}
+                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm shadow-sm flex justify-center items-center gap-2"
+                    >
+                      {isWlSubmitting ? <><Loader2 size={16} className="animate-spin" /> Saving...</> : "Add to Whitelist"}
+                    </button>
+                  </form>
+                </div>
+              </div>
+
+              <div className="lg:col-span-2">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                      <tr>
+                        <th className="px-6 py-4">Label</th>
+                        <th className="px-6 py-4">Contract Address</th>
+                        <th className="px-6 py-4 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {whitelist.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="px-6 py-8 text-center text-slate-500 font-medium">
+                            No tokens whitelisted yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        whitelist.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-6 py-4 font-bold text-slate-800">{item.label}</td>
+                            <td className="px-6 py-4 font-mono text-slate-500 text-xs">
+                              <div className="flex items-center gap-2">
+                                {item.contract_address}
+                                <button 
+                                  onClick={() => handleCopy(item.contract_address)} 
+                                  className="text-slate-400 hover:text-blue-600 transition-colors"
+                                  title="Copy Address"
+                                >
+                                  {copiedAddress === item.contract_address ? <Check size={14} className="text-green-600"/> : <Copy size={14} />}
+                                </button>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <button 
+                                onClick={() => handleRemoveWhitelist(item.contract_address)}
+                                className="text-slate-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-md transition-colors"
+                                title="Remove from Whitelist"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
-      {/* MODAL ADD */}
+      {/* MODAL ADD WATCHLIST TARGET */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-[100] backdrop-blur-sm">
-          <div className="bg-black border-2 border-green-500 p-6 w-full max-w-md shadow-[0_0_20px_rgba(0,255,65,0.2)]">
-            <div className="flex justify-between items-center mb-6 border-b border-green-500 pb-2">
-              <h3 className="text-lg font-bold tracking-widest uppercase">&gt; INPUT_NEW_TARGET</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-green-700 hover:text-green-400">
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden">
+            <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50">
+              <h3 className="text-base font-bold text-slate-800">Add Tracking Target</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
                 <X size={20} />
               </button>
             </div>
             
-            <form onSubmit={handleAddWallet} className="flex flex-col gap-4">
+            <form onSubmit={handleAddWallet} className="p-6 space-y-5">
               <div>
-                <label className="block text-xs text-green-600 mb-1 uppercase tracking-wider">TARGET_ADDRESS (HEX)</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Wallet Address (HEX)</label>
                 <input 
                   type="text" 
                   value={newWallet}
                   onChange={(e) => setNewWallet(e.target.value)}
-                  className="w-full bg-black border border-green-800 rounded-none p-2 text-green-400 outline-none focus:border-green-400 text-sm font-mono placeholder:text-green-900"
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-slate-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm font-mono"
                   placeholder="0x..."
                   required
                 />
               </div>
               
               <div>
-                <label className="block text-xs text-green-600 mb-1 uppercase tracking-wider">NETWORK_PROTOCOL</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Blockchain Network</label>
                 <select 
                   value={newNetwork}
                   onChange={(e) => setNewNetwork(e.target.value)}
-                  className="w-full bg-black border border-green-800 rounded-none p-2 text-green-400 outline-none focus:border-green-400 text-sm font-mono"
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-slate-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm font-medium"
                 >
-                  <option value="Ethereum">ETH_MAINNET</option>
-                  <option value="BSC">BSC_MAINNET</option>
-                  <option value="Base Chain">BASE_NETWORK</option>
-                  <option value="EVM (ETH/BSC/RH)">EVM_OMNICHAIN</option>
-                  <option value="Solana">SOLANA_NETWORK</option>
+                  <option value="EVM (ETH/BSC/RH)">EVM Omnichain (All)</option>
+                  <option value="Ethereum">Ethereum Mainnet</option>
+                  <option value="BSC">BNB Smart Chain</option>
+                  <option value="Base Chain">Base Network</option>
+                  <option value="Solana">Solana Network</option>
                 </select>
               </div>
 
-              <button 
-                type="submit" 
-                disabled={isSubmitting}
-                className="w-full border border-green-500 hover:bg-green-500 hover:text-black text-green-500 font-bold py-2 px-4 mt-4 disabled:opacity-50 transition-colors uppercase tracking-widest text-sm"
-              >
-                {isSubmitting ? "EXECUTING..." : "[ INITIATE_TRACKING ]"}
-              </button>
+              <div className="pt-2">
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg disabled:opacity-50 transition-colors text-sm shadow-sm flex justify-center items-center gap-2"
+                >
+                  {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Saving...</> : "Start Tracking"}
+                </button>
+              </div>
             </form>
           </div>
         </div>
