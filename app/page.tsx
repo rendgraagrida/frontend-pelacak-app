@@ -4,7 +4,7 @@ import React, { useState, useEffect, Fragment, useRef } from 'react';
 import axios from 'axios';
 import { 
   LayoutGrid, ShieldCheck, Plus, X, ChevronDown, ChevronUp, 
-  Loader2, Copy, Check, ExternalLink, Wallet, Trash2, ArrowUpDown, Filter, AlertTriangle, Shield
+  Loader2, Copy, Check, ExternalLink, Wallet, Trash2, ArrowUpDown, Filter, AlertTriangle, Shield, Ban
 } from 'lucide-react';
 
 interface WalletItem {
@@ -31,7 +31,7 @@ interface WhitelistItem {
 }
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<'watchlist' | 'whitelist'>('watchlist');
+  const [activeTab, setActiveTab] = useState<'watchlist' | 'whitelist' | 'blacklist'>('watchlist');
 
   const [wallets, setWallets] = useState<WalletItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +61,18 @@ export default function Dashboard() {
   const [newWlLabel, setNewWlLabel] = useState('');
   const [isWlSubmitting, setIsWlSubmitting] = useState(false);
 
+  interface BlacklistItem {
+    id?: number;
+    contract_address: string;
+    label?: string;
+    chain_network?: string;
+  }
+  const [blacklist, setBlacklist] = useState<BlacklistItem[]>([]);
+  const [newBlAddress, setNewBlAddress] = useState('');
+  const [newBlLabel, setNewBlLabel] = useState('');
+  const [newBlNetwork, setNewBlNetwork] = useState('Unknown');
+  const [isBlSubmitting, setIsBlSubmitting] = useState(false);
+
   const fetchWatchlist = async () => {
     try {
       setLoading(true);
@@ -82,19 +94,31 @@ export default function Dashboard() {
     }
   };
 
+  const fetchBlacklist = async () => {
+    try {
+      const response = await axios.get('/api/blacklist');
+      setBlacklist(response.data);
+    } catch (error) {
+      console.error("Gagal mengambil data blacklist:", error);
+    }
+  };
+
   useEffect(() => {
     fetchWatchlist();
     fetchWhitelist();
+    fetchBlacklist();
   }, []);
 
   const fetchTokensQuietly = async (walletAddress: string, chainNetwork: string) => {
     const memoryKey = `${walletAddress}-${chainNetwork}`;
     try {
       setLoadingTokens((prev) => ({ ...prev, [memoryKey]: true }));
-      const response = await axios.post('/api/tokens', { wallet_address: walletAddress, chain_network: chainNetwork, page: 1 });
-      const newTokens = response.data.tokens;
+      const isSolana = chainNetwork.toUpperCase() === 'SOLANA';
+      const endpoint = isSolana ? '/api/solana' : '/api/tokens';
+      const response = await axios.post(endpoint, { wallet_address: walletAddress, chain_network: chainNetwork, page: 1 });
+      const newTokens = response.data.tokens || [];
       setWalletTokens((prev) => ({ ...prev, [memoryKey]: newTokens }));
-      setWalletHasNext((prev) => ({ ...prev, [memoryKey]: response.data.hasNextPage }));
+      setWalletHasNext((prev) => ({ ...prev, [memoryKey]: response.data.hasNextPage || false }));
       setWalletPages((prev) => ({ ...prev, [memoryKey]: 1 }));
     } catch (error) {} finally {
       setLoadingTokens((prev) => ({ ...prev, [memoryKey]: false }));
@@ -107,7 +131,7 @@ export default function Dashboard() {
       isSyncing.current = true;
       for (const wallet of wallets) {
         const safeNet = wallet.chain_network.toUpperCase();
-        if (!['ETHEREUM', 'BASE CHAIN', 'BSC'].includes(safeNet) && !safeNet.includes('EVM')) continue;
+        if (!['ETHEREUM', 'BASE CHAIN', 'BSC', 'SOLANA'].includes(safeNet) && !safeNet.includes('EVM')) continue;
         const memoryKey = `${wallet.wallet_address}-${wallet.chain_network}`;
         if (!walletTokens[memoryKey]) {
           await fetchTokensQuietly(wallet.wallet_address, wallet.chain_network);
@@ -137,9 +161,11 @@ export default function Dashboard() {
     const nextPage = (walletPages[memoryKey] || 1) + 1;
     try {
       setLoadingTokens((prev) => ({ ...prev, [memoryKey]: true }));
-      const response = await axios.post('/api/tokens', { wallet_address: walletAddress, chain_network: chainNetwork, page: nextPage });
-      setWalletTokens((prev) => ({ ...prev, [memoryKey]: [...(prev[memoryKey] || []), ...response.data.tokens] }));
-      setWalletHasNext((prev) => ({ ...prev, [memoryKey]: response.data.hasNextPage }));
+      const isSolana = chainNetwork.toUpperCase() === 'SOLANA';
+      const endpoint = isSolana ? '/api/solana' : '/api/tokens';
+      const response = await axios.post(endpoint, { wallet_address: walletAddress, chain_network: chainNetwork, page: nextPage });
+      setWalletTokens((prev) => ({ ...prev, [memoryKey]: [...(prev[memoryKey] || []), ...(response.data.tokens || [])] }));
+      setWalletHasNext((prev) => ({ ...prev, [memoryKey]: response.data.hasNextPage || false }));
       setWalletPages((prev) => ({ ...prev, [memoryKey]: nextPage }));
     } catch (e) {} finally {
       setLoadingTokens((prev) => ({ ...prev, [memoryKey]: false }));
@@ -209,6 +235,46 @@ export default function Dashboard() {
     } catch (error) {}
   };
 
+  const handleAddBlacklist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBlAddress) return;
+    try {
+      setIsBlSubmitting(true);
+      const response = await axios.post('/api/blacklist', {
+        contract_address: newBlAddress,
+        label: newBlLabel,
+        chain_network: newBlNetwork,
+      });
+      if (response.data.error) {
+        alert(`[GAGAL] ${response.data.error}`);
+        return;
+      }
+      setNewBlAddress('');
+      setNewBlLabel('');
+      fetchBlacklist();
+      // 🔄 Clear cache: paksa semua wallet re-fetch dengan blacklist terbaru
+      setWalletTokens({});
+      setExpandedWallet(null);
+      isSyncing.current = false;
+    } catch (error: any) {
+      alert(error.response?.data?.error || "Gagal menambahkan ke blacklist");
+    } finally {
+      setIsBlSubmitting(false);
+    }
+  };
+
+  const handleRemoveBlacklist = async (contract_address: string) => {
+    if (!confirm(`Hapus dari blacklist?`)) return;
+    try {
+      await axios.delete('/api/blacklist', { data: { contract_address } });
+      fetchBlacklist();
+      // 🔄 Clear cache: paksa semua wallet re-fetch dengan blacklist terbaru
+      setWalletTokens({});
+      setExpandedWallet(null);
+      isSyncing.current = false;
+    } catch (error) {}
+  };
+
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedAddress(text);
@@ -217,6 +283,9 @@ export default function Dashboard() {
 
   const getExplorerUrl = (network: string, tokenAddress: string, walletAddress: string) => {
     const net = network.toUpperCase();
+    if (net === 'SOLANA') {
+      return `https://solscan.io/account/${walletAddress}`;
+    }
     let baseUrl = 'https://etherscan.io';
     if (net === 'BASE CHAIN') baseUrl = 'https://basescan.org';
     else if (net === 'BSC') baseUrl = 'https://bscscan.com';
@@ -262,6 +331,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg border border-slate-200">
               <button onClick={() => setActiveTab('watchlist')} className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all flex items-center gap-2 ${activeTab === 'watchlist' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}><LayoutGrid size={16} /> Targets</button>
               <button onClick={() => setActiveTab('whitelist')} className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all flex items-center gap-2 ${activeTab === 'whitelist' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}><ShieldCheck size={16} /> Whitelist</button>
+              <button onClick={() => setActiveTab('blacklist')} className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all flex items-center gap-2 ${activeTab === 'blacklist' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}><Ban size={16} /> Blacklist</button>
             </div>
           </div>
         </div>
@@ -315,7 +385,7 @@ export default function Dashboard() {
                       {sortedWallets.map((wallet, index) => {
                         const memoryKey = `${wallet.wallet_address}-${wallet.chain_network}`;
                         const isExpanded = expandedWallet === memoryKey;
-                        const isSupported = ['ETHEREUM', 'BASE CHAIN', 'BSC'].includes(wallet.chain_network.toUpperCase()) || wallet.chain_network.toUpperCase().includes('EVM');
+                        const isSupported = ['ETHEREUM', 'BASE CHAIN', 'BSC', 'SOLANA'].includes(wallet.chain_network.toUpperCase()) || wallet.chain_network.toUpperCase().includes('EVM');
                         const isLoadingToken = loadingTokens[memoryKey];
                         const tokens = walletTokens[memoryKey] || [];
                         const validTokens = tokens.filter(t => !t.is_spam);
@@ -515,6 +585,99 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* TAB 3: BLACKLIST */}
+        {activeTab === 'blacklist' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">Blacklist Configuration</h2>
+              <p className="text-sm text-slate-500 mt-1">Tokens added here will be <strong className="text-red-600">force-marked as Spam</strong> and excluded from all net worth calculations.</p>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-1">
+                <div className="bg-white rounded-xl shadow-sm border border-red-200 p-6">
+                  <h3 className="text-sm font-bold text-red-700 mb-4 border-b border-red-100 pb-2 flex items-center gap-2"><Ban size={14} /> Block a Token</h3>
+                  <form onSubmit={handleAddBlacklist} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">Contract / Mint Address</label>
+                      <input
+                        type="text"
+                        value={newBlAddress}
+                        onChange={(e) => setNewBlAddress(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 outline-none focus:border-red-400 text-sm font-mono"
+                        placeholder="0x... or Sol mint address"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">Label (Optional)</label>
+                      <input
+                        type="text"
+                        value={newBlLabel}
+                        onChange={(e) => setNewBlLabel(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 outline-none focus:border-red-400 text-sm"
+                        placeholder="e.g. Pump.fun Scam"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">Chain Network</label>
+                      <select
+                        value={newBlNetwork}
+                        onChange={(e) => setNewBlNetwork(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 outline-none focus:border-red-400 text-sm font-medium"
+                      >
+                        <option value="Unknown">Unknown / Any</option>
+                        <option value="Solana">Solana</option>
+                        <option value="Ethereum">Ethereum</option>
+                        <option value="BSC">BNB Smart Chain</option>
+                        <option value="Base Chain">Base Network</option>
+                      </select>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isBlSubmitting}
+                      className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg shadow-sm flex justify-center items-center gap-2"
+                    >
+                      {isBlSubmitting ? <Loader2 size={16} className="animate-spin" /> : <><Ban size={14}/> Block Token</>}
+                    </button>
+                  </form>
+                </div>
+              </div>
+              <div className="lg:col-span-2">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-red-50 border-b border-red-100 text-red-700 font-semibold">
+                      <tr>
+                        <th className="px-6 py-4">Label</th>
+                        <th className="px-6 py-4">Contract / Mint Address</th>
+                        <th className="px-6 py-4">Chain</th>
+                        <th className="px-6 py-4 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {blacklist.length === 0 ? (
+                        <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500">No tokens blacklisted yet. Add a spam token above to block it.</td></tr>
+                      ) : (
+                        blacklist.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-red-50/30">
+                            <td className="px-6 py-4 font-bold text-slate-800">{item.label || <span className="text-slate-400 italic">No label</span>}</td>
+                            <td className="px-6 py-4 font-mono text-slate-500 text-xs">{item.contract_address}</td>
+                            <td className="px-6 py-4">
+                              <span className="bg-red-100 text-red-700 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">{item.chain_network || 'Unknown'}</span>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <button onClick={() => handleRemoveBlacklist(item.contract_address)} className="text-slate-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-md"><Trash2 size={16} /></button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* MODAL ADD WATCHLIST TARGET */}
@@ -541,6 +704,7 @@ export default function Dashboard() {
                   <option value="Ethereum">Ethereum Mainnet</option>
                   <option value="BSC">BNB Smart Chain</option>
                   <option value="Base Chain">Base Network</option>
+                  <option value="Solana">Solana</option>
                 </select>
               </div>
               <button type="submit" disabled={isSubmitting} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg disabled:opacity-50 text-sm shadow-sm flex justify-center items-center gap-2">
