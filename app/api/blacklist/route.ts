@@ -62,12 +62,20 @@ export async function POST(request: Request) {
 // DELETE — Hapus token dari blacklist
 export async function DELETE(request: Request) {
   try {
-    const { contract_address } = await request.json();
+    const { contract_address, deleteAll } = await request.json();
+    
+    const supabase = getSupabase();
+    if (!supabase) return NextResponse.json({ error: 'Supabase tidak terkonfigurasi' }, { status: 500 });
+
+    if (deleteAll) {
+      const { error } = await supabase.from('blacklist_tokens').delete().neq('contract_address', '');
+      if (error) throw error;
+      return NextResponse.json({ message: 'Semua token berhasil dihapus dari blacklist' }, { status: 200 });
+    }
+
     if (!contract_address) {
       return NextResponse.json({ error: 'Contract address wajib diisi' }, { status: 400 });
     }
-
-    const supabase = getSupabase();
     if (!supabase) return NextResponse.json({ error: 'Supabase tidak terkonfigurasi' }, { status: 500 });
 
     const { error } = await supabase

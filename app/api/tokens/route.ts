@@ -9,13 +9,34 @@ function getSupabase() {
   return createClient(url, key);
 }
 
-const getMoralisChain = (network: string) => {
+const getAlchemyRpcUrl = (network: string) => {
   const net = network.toUpperCase();
-  if (net === 'ETHEREUM' || net.includes('EVM')) return 'eth';
-  if (net === 'BASE CHAIN') return 'base';
-  if (net === 'BSC') return 'bsc';
-  return null;
+  if (net === 'ROBINHOOD' || net.includes('ROBINHOOD') || net === 'RH') return process.env.ALCHEMY_ROBINHOOD_URL || '';
+  if (net === 'ETHEREUM' || net.includes('ETH')) return process.env.ALCHEMY_ETH_URL || '';
+  if (net === 'BASE CHAIN' || net.includes('BASE')) return process.env.ALCHEMY_BASE_URL || '';
+  if (net === 'BSC' || net.includes('BNB')) return process.env.ALCHEMY_BSC_URL || '';
+  return '';
 };
+
+const getNativeCoinInfo = (network: string) => {
+  const net = network.toUpperCase();
+  if (net === 'BSC' || net.includes('BNB')) return { id: 'binancecoin', symbol: 'BNB', name: 'BNB' };
+  if (net === 'ROBINHOOD' || net.includes('ROBINHOOD') || net === 'RH') return { id: 'ethereum', symbol: 'ETH', name: 'Ethereum (Robinhood)' };
+  return { id: 'ethereum', symbol: 'ETH', name: 'Ethereum' };
+};
+
+// Helper untuk batch RPC calls
+async function rpcCall(url: string, method: string, params: any[]) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+  });
+  if (!res.ok) throw new Error(`RPC Error: ${res.status}`);
+  const json = await res.json();
+  if (json.error) throw new Error(json.error.message);
+  return json.result;
+}
 
 export async function POST(request: Request) {
   try {
@@ -39,27 +60,36 @@ export async function POST(request: Request) {
       return NextResponse.json(solData, { status: solRes.status });
     }
 
-    const chain = getMoralisChain(chain_network);
-    const moralisApiKey = process.env.MORALIS_API_KEY || '';
-
-    if (!chain || !moralisApiKey) {
-      return NextResponse.json({ error: `Jaringan EVM tidak didukung` }, { status: 400 });
+    const rpcUrl = getAlchemyRpcUrl(chain_network);
+    if (!rpcUrl) {
+      return NextResponse.json({ error: `Jaringan EVM tidak didukung atau RPC URL belum disetel` }, { status: 400 });
     }
 
-    const headers = { "Accept": "application/json", "X-API-Key": moralisApiKey };
-
-    // 1. Ambil data whitelist & blacklist dari Supabase secara paralel
+    // 1. Ambil data tracked_coins & blacklist dari Supabase
+    // tracked_coins berfungsi sebagai VIP list — token ini WAJIB selalu tampil, tidak boleh disembunyikan
     let VIP_TOKENS: string[] = [];
     let BLACKLISTED_TOKENS: string[] = [];
     try {
       const supabase = getSupabase();
       if (supabase) {
-        const [whitelistRes, blacklistRes] = await Promise.all([
-          supabase.from('whitelist_tokens').select('contract_address'),
+        // Ambil tracked_coins DENGAN chain_network agar bisa filter per-chain
+        const [trackedRes, blacklistRes] = await Promise.all([
+          supabase.from('tracked_coins').select('contract_address, chain_network'),
           supabase.from('blacklist_tokens').select('contract_address'),
         ]);
-        if (whitelistRes.data && Array.isArray(whitelistRes.data)) {
-          VIP_TOKENS = whitelistRes.data.map((item: any) => item.contract_address?.toLowerCase() || "");
+        if (trackedRes.data && Array.isArray(trackedRes.data)) {
+          // Normalisasi chain_network agar bisa dicocokkan: 'bsc', 'BSC', 'Binance', 'Robinhood' match ke RPC masing-masing
+          const chainNorm = safeNet; // e.g. 'BSC', 'ETHEREUM', 'BASE CHAIN', 'ROBINHOOD'
+          VIP_TOKENS = trackedRes.data
+            .filter((item: any) => {
+              const itemChain = (item.chain_network || '').toUpperCase();
+              if (chainNorm.includes('BSC') || chainNorm.includes('BNB')) return itemChain.includes('BSC') || itemChain.includes('BNB');
+              if (chainNorm.includes('ROBINHOOD') || chainNorm.includes('RH')) return itemChain.includes('ROBINHOOD') || itemChain.includes('RH');
+              if (chainNorm.includes('ETH')) return itemChain.includes('ETH') && !itemChain.includes('BSC') && !itemChain.includes('ROBINHOOD');
+              if (chainNorm.includes('BASE')) return itemChain.includes('BASE');
+              return false;
+            })
+            .map((item: any) => item.contract_address?.toLowerCase() || "");
         }
         if (blacklistRes.data && Array.isArray(blacklistRes.data)) {
           BLACKLISTED_TOKENS = blacklistRes.data.map((item: any) => item.contract_address?.toLowerCase() || "");
@@ -67,23 +97,121 @@ export async function POST(request: Request) {
       }
     } catch (err) {}
 
-    let allTokens: any[] = [];
-    try {
-      // 🔴 Mematikan exclude_spam agar koin spam tetap tertarik untuk dikarantina di folder Spam
-      const tokenUrl = `https://deep-index.moralis.io/api/v2.2/wallets/${safeAddress}/tokens?chain=${chain}&exclude_spam=false`;
-      const tokenRes = await fetch(tokenUrl, { headers });
-      if (tokenRes.ok) {
-        const data = await tokenRes.json();
-        allTokens = Array.isArray(data.result) ? data.result : Array.isArray(data) ? data : [];
+    // 2. Ambil token balances dari Alchemy dengan Pagination (Max 1000 tokens = 10 pages)
+    let rawTokenBalances: any[] = [];
+    let pageKey = null;
+    let pageCount = 0;
+    
+    do {
+      const options: any = {};
+      if (pageKey) options.pageKey = pageKey;
+      
+      const balancesData: any = await rpcCall(rpcUrl, 'alchemy_getTokenBalances', [safeAddress, 'erc20', options]);
+      const chunk = balancesData.tokenBalances || [];
+      rawTokenBalances = [...rawTokenBalances, ...chunk];
+      
+      pageKey = balancesData.pageKey;
+      pageCount++;
+    } while (pageKey && pageCount < 4);
+    
+    // Explicitly fetch VIP_TOKENS (sudah difilter per chain) agar tidak pernah terlewat pagination
+    if (VIP_TOKENS.length > 0) {
+      try {
+        const vipBalancesData: any = await rpcCall(rpcUrl, 'alchemy_getTokenBalances', [safeAddress, VIP_TOKENS]);
+        const vipChunk = (vipBalancesData.tokenBalances || []).filter(
+          (t: any) => t.tokenBalance && t.tokenBalance !== '0x0000000000000000000000000000000000000000000000000000000000000000'
+        );
+        rawTokenBalances = [...rawTokenBalances, ...vipChunk];
+        console.log(`[VIP] Targeted fetch for ${VIP_TOKENS.length} VIP token(s), got ${vipChunk.length} with balance`);
+      } catch (err) {
+        console.error('[VIP] Targeted fetch error:', err);
       }
-    } catch (err) {}
-    if (!Array.isArray(allTokens)) allTokens = [];
+    }
+    
+    // Filter out zero balances and deduplicate
+    const uniqueTokensMap = new Map();
+    rawTokenBalances.forEach((t: any) => {
+      if (t.tokenBalance && t.tokenBalance !== '0x0' && t.tokenBalance !== '0') {
+        uniqueTokensMap.set(t.contractAddress.toLowerCase(), t);
+      }
+    });
+    const activeTokens = Array.from(uniqueTokensMap.values());
+    
+    // 3. Ambil metadata untuk tiap token (Batching up to limits, or Promise.all if not too many)
+    const tokenMetadataMap: Record<string, any> = {};
+    const contractAddresses = activeTokens.map((t: any) => t.contractAddress);
+    
+    // For small number of tokens, we can use Promise.all. If huge, we might need chunks, but Alchemy limit is high.
+    // Let's do it in chunks of 50 just to be safe.
+    for (let i = 0; i < contractAddresses.length; i += 50) {
+      const chunk = contractAddresses.slice(i, i + 50);
+      await Promise.all(chunk.map(async (address: string) => {
+        try {
+          const metadata = await rpcCall(rpcUrl, 'alchemy_getTokenMetadata', [address]);
+          tokenMetadataMap[address.toLowerCase()] = metadata;
+        } catch (e) {
+          // ignore individual token metadata failures
+        }
+      }));
+    }
 
-    // 2. Format & Map Token dengan Bendera Karantina Spam + Blacklist
-    const formattedTokens = allTokens.map((t: any) => {
-      const contract = t.token_address?.toLowerCase() || "";
-      const claimedValue = t.usd_value || 0;
+    // 4. Ambil Harga Live USD dari DexScreener (Batch up to 30)
+    const dexMetaMap: Record<string, { price_usd: number, logo: string | null }> = {};
+    if (contractAddresses.length > 0) {
+      try {
+        for (let i = 0; i < contractAddresses.length; i += 30) {
+          const chunk = contractAddresses.slice(i, i + 30);
+          const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(",")}`, {
+            headers: { 'Accept': 'application/json' }
+          }).then(r => r.json()).catch(() => null);
+
+          if (dexRes?.pairs && Array.isArray(dexRes.pairs)) {
+            dexRes.pairs.forEach((p: any) => {
+              const addr = p.baseToken?.address?.toLowerCase();
+              if (addr && !dexMetaMap[addr]) {
+                dexMetaMap[addr] = {
+                  price_usd: parseFloat(p.priceUsd || "0") || 0,
+                  logo: p.info?.imageUrl || null
+                };
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.error("DexScreener API error:", e);
+      }
+    }
+
+    // 5. Gabungkan dan format data (Format & Map Token dengan Bendera Karantina Spam + Blacklist)
+    const formattedTokens = activeTokens.map((t: any) => {
+      const contract = t.contractAddress?.toLowerCase() || "";
+      const rawBalanceHex = t.tokenBalance;
+      
+      const meta = tokenMetadataMap[contract] || {};
+      const dexInfo = dexMetaMap[contract] || { price_usd: 0, logo: null };
+      
+      const decimals = meta.decimals !== null && meta.decimals !== undefined ? parseInt(meta.decimals) : 18;
+      
+      // Hitung actual balance dari hex
+      // Note: hexbToNumber is tricky for bigints in standard JS, use BigInt
+      let balanceFormatted = "0";
+      try {
+        const balanceBigInt = BigInt(rawBalanceHex);
+        const divisor = BigInt(10 ** decimals);
+        // Simple division for integers, we also want fractions if possible.
+        // Let's use standard Number conversion for typical balances, or custom string formatting.
+        const balanceNum = Number(balanceBigInt) / (10 ** decimals);
+        balanceFormatted = balanceNum.toFixed(6);
+      } catch(e) {
+        balanceFormatted = "0";
+      }
+      
+      const numBalance = parseFloat(balanceFormatted);
+      const priceUsd = dexInfo.price_usd;
+      const totalValueUsd = numBalance * priceUsd;
+
       let isSpam = false;
+      const validLogo = (typeof dexInfo.logo === 'string' && dexInfo.logo.length > 5) || (typeof meta.logo === 'string' && meta.logo.length > 5);
 
       // 🚫 BLACKLIST: Prioritas tertinggi — paksa spam jika ada di blacklist
       if (BLACKLISTED_TOKENS.includes(contract)) {
@@ -91,53 +219,44 @@ export async function POST(request: Request) {
       } else if (VIP_TOKENS.includes(contract)) {
         isSpam = false;
       } else {
-        const validLogo = (typeof t.logo === 'string' && t.logo.length > 5) || (typeof t.thumbnail === 'string' && t.thumbnail.length > 5);
-        if (t.possible_spam === true) isSpam = true;
-        else if (!validLogo && claimedValue > 0) isSpam = true;
-        else if (claimedValue < 0.01 && !validLogo) isSpam = true;
+        if (!validLogo && totalValueUsd > 0) isSpam = true;
+        else if (totalValueUsd < 0.01 && !validLogo) isSpam = true;
       }
 
-      const decimals = t.decimals ? parseInt(t.decimals) : 18;
-      const balanceFormatted = t.balance_formatted || (Number(t.balance) / Math.pow(10, decimals)).toFixed(4);
-      
       return {
-        contract_address: t.token_address,
-        name: t.name || "Unknown",
-        symbol: t.symbol || "???",
-        logo: t.thumbnail || t.logo || null,
+        contract_address: t.contractAddress,
+        name: meta.name || "Unknown",
+        symbol: meta.symbol || "???",
+        logo: dexInfo.logo || meta.logo || null,
         balance: balanceFormatted,
-        price_usd: t.usd_price || 0,
-        total_value_usd: t.usd_value || (t.usd_price * Number(balanceFormatted)) || 0,
+        price_usd: priceUsd,
+        total_value_usd: totalValueUsd,
         is_spam: isSpam
       };
     });
 
-    // 3. Ambil Saldo Native Coin (ETH / BNB)
+    // 6. Ambil Saldo Native Coin (ETH / BNB)
     let nativeBalanceNum = 0;
     try {
-      const nativeUrl = `https://deep-index.moralis.io/api/v2.2/${safeAddress}/balance?chain=${chain}`;
-      const nativeRes = await fetch(nativeUrl, { headers });
-      if (nativeRes.ok) {
-        const data = await nativeRes.json();
-        if (data.balance) nativeBalanceNum = Number(data.balance) / 1e18; 
-      }
+      const nativeBalanceHex = await rpcCall(rpcUrl, 'eth_getBalance', [safeAddress, 'latest']);
+      nativeBalanceNum = Number(BigInt(nativeBalanceHex)) / 1e18;
     } catch (err) {}
 
     let nativePriceUsd = 0;
+    const nativeMeta = getNativeCoinInfo(chain_network);
     try {
-      const nativeCoinId = chain === 'bsc' ? 'binancecoin' : 'ethereum';
-      const cgRes = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${nativeCoinId}&vs_currencies=usd`).catch(() => null);
+      const cgRes = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${nativeMeta.id}&vs_currencies=usd`).catch(() => null);
       if (cgRes && cgRes.ok) {
         const cgData = await cgRes.json();
-        nativePriceUsd = cgData[nativeCoinId]?.usd || 0;
+        nativePriceUsd = cgData[nativeMeta.id]?.usd || 0;
       }
     } catch (err) {}
 
     if (nativeBalanceNum > 0 && page === 1) {
       formattedTokens.push({
         contract_address: 'NATIVE_COIN',
-        name: chain === 'bsc' ? 'BNB' : 'Ethereum',
-        symbol: chain === 'bsc' ? 'BNB' : 'ETH',
+        name: nativeMeta.name,
+        symbol: nativeMeta.symbol,
         logo: null,
         balance: nativeBalanceNum.toFixed(4),
         price_usd: nativePriceUsd,
@@ -146,25 +265,20 @@ export async function POST(request: Request) {
       });
     }
 
-    // 4. Sort: Koin Asli & Bernilai di atas, Spam di folder karantina bawah
+    // Sort: Koin Asli & Bernilai di atas, Spam di bawah
     formattedTokens.sort((a: any, b: any) => {
       if (a.is_spam && !b.is_spam) return 1;
       if (!a.is_spam && b.is_spam) return -1;
-      return (b.total_value_usd || 0) - (a.total_value_usd || 0);
+      return b.total_value_usd - a.total_value_usd;
     });
-    
-    const limit = 30;
-    const startIndex = (page - 1) * limit;
-    const paginatedTokens = formattedTokens.slice(startIndex, startIndex + limit);
 
-    return NextResponse.json({ 
-      tokens: paginatedTokens, 
-      hasNextPage: startIndex + limit < formattedTokens.length,
-      currentPage: page
-    }, { status: 200 });
+    return NextResponse.json({
+      tokens: formattedTokens,
+      hasNextPage: false // Alchemy RPC gives all non-zero tokens at once typically, or we can handle pagination later
+    });
 
   } catch (error: any) {
-    console.error("Token Route Crash:", error);
-    return NextResponse.json({ tokens: [], error: `System Crash: ${error.message}` }, { status: 200 });
+    console.error("Tokens API Error:", error);
+    return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 });
   }
 }

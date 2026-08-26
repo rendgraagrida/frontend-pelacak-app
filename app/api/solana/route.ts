@@ -76,7 +76,7 @@ export async function POST(request: Request) {
       const supabase = getSupabase();
       if (supabase) {
         const [whitelistRes, blacklistRes] = await Promise.all([
-          supabase.from('whitelist_tokens').select('contract_address'),
+          supabase.from('tracked_coins').select('contract_address'),
           supabase.from('blacklist_tokens').select('contract_address'),
         ]);
         if (whitelistRes.data && Array.isArray(whitelistRes.data)) {
@@ -93,12 +93,12 @@ export async function POST(request: Request) {
 
     // 2. Ambil saldo Native SOL & Akun Token SPL (Standard + Token-2022) secara PARALEL
     const [lamports, cgData, standardTokensRes, token2022Res] = await Promise.all([
-      connection.getBalance(pubKey).catch(() => 0),
+      connection.getBalance(pubKey),
       fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', {
         headers: { 'Accept': 'application/json' }
       }).then(r => r.json()).catch(() => ({})),
-      connection.getParsedTokenAccountsByOwner(pubKey, { programId: TOKEN_PROGRAM_ID }).catch(() => ({ value: [] })),
-      connection.getParsedTokenAccountsByOwner(pubKey, { programId: TOKEN_2022_PROGRAM_ID }).catch(() => ({ value: [] }))
+      connection.getParsedTokenAccountsByOwner(pubKey, { programId: TOKEN_PROGRAM_ID }),
+      connection.getParsedTokenAccountsByOwner(pubKey, { programId: TOKEN_2022_PROGRAM_ID })
     ]);
 
     const solBalanceNum = lamports / LAMPORTS_PER_SOL;
@@ -143,27 +143,42 @@ export async function POST(request: Request) {
       }
     }
 
-    // 5. AMBIL HARGA LIVE USD & LOGO DARI DEXSCREENER (Batch up to 30)
+    // 5. AMBIL HARGA LIVE USD & LOGO DARI DEXSCREENER (Chunking up to 180 tokens)
     const dexMetaMap: Record<string, { name: string; symbol: string; price_usd: number; logo: string | null }> = {};
-    if (mintAddresses.length > 0) {
+    
+    // Filter out blacklisted tokens from being sent to DexScreener to save quota
+    const validMintsForPricing = mintAddresses.filter(mint => !BLACKLISTED_TOKENS.includes(mint.toLowerCase()));
+    
+    if (validMintsForPricing.length > 0) {
       try {
-        const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mintAddresses.slice(0, 30).join(",")}`, {
-          headers: { 'Accept': 'application/json' }
-        }).then(r => r.json()).catch(() => null);
-
-        if (dexRes?.pairs && Array.isArray(dexRes.pairs)) {
-          dexRes.pairs.forEach((p: any) => {
-            const addr = p.baseToken?.address;
-            if (addr && !dexMetaMap[addr]) {
-              dexMetaMap[addr] = {
-                name: p.baseToken.name || "",
-                symbol: p.baseToken.symbol || "",
-                price_usd: parseFloat(p.priceUsd || "0") || 0,
-                logo: p.info?.imageUrl || null
-              };
-            }
-          });
+        const chunkSize = 30;
+        const chunks = [];
+        for (let i = 0; i < validMintsForPricing.length; i += chunkSize) {
+          chunks.push(validMintsForPricing.slice(i, i + chunkSize));
         }
+
+        // Limit to max 6 chunks (180 tokens) to prevent rate limit
+        const limitedChunks = chunks.slice(0, 6);
+
+        await Promise.all(limitedChunks.map(async (chunk) => {
+          const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(",")}`, {
+            headers: { 'Accept': 'application/json' }
+          }).then(r => r.json()).catch(() => null);
+
+          if (dexRes?.pairs && Array.isArray(dexRes.pairs)) {
+            dexRes.pairs.forEach((p: any) => {
+              const addr = p.baseToken?.address;
+              if (addr && !dexMetaMap[addr]) {
+                dexMetaMap[addr] = {
+                  name: p.baseToken.name || "",
+                  symbol: p.baseToken.symbol || "",
+                  price_usd: parseFloat(p.priceUsd || "0") || 0,
+                  logo: p.info?.imageUrl || null
+                };
+              }
+            });
+          }
+        }));
       } catch (e) {
         console.error("DexScreener API error:", e);
       }

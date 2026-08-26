@@ -134,7 +134,14 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Database belum terkonfigurasi" }, { status: 500 });
     }
 
-    const { wallet_address, chain_network } = await request.json();
+    const { wallet_address, chain_network, deleteAll } = await request.json();
+    
+    if (deleteAll) {
+      const { error } = await supabase.from('watchlist').delete().neq('wallet_address', '');
+      if (error) throw error;
+      return NextResponse.json({ success: true });
+    }
+
     const { error } = await supabase
       .from('watchlist')
       .delete()
