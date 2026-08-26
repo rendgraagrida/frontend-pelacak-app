@@ -164,15 +164,14 @@ export function formatSummaryMessage(params: {
   coinCount: number;
   totalNetWorth: number;
   topWallets?: Array<{ label: string; balance: string; network: string }>;
-  topCoins?: Array<{ symbol: string; priceUsd?: number | null; rsi?: number | null }>;
+  topCoins?: Array<{ symbol: string; priceUsd?: number | null; rsi?: number | null; change24h?: number | null }>;
 }): string {
   let text = `💼 <b>PELACAK PORTFOLIO RADAR SUMMARY</b> 💼\n\n`;
   text += `🎯 <b>Tracked Wallets:</b> <b>${params.walletCount} targets</b>\n`;
-  text += `🪙 <b>Tracked Coins:</b> <b>${params.coinCount} assets</b>\n`;
-  text += `💰 <b>Combined Net Worth:</b> <b>${formatCurrency(params.totalNetWorth)}</b>\n\n`;
+  text += `🪙 <b>Tracked Coins:</b> <b>${params.coinCount} assets</b>\n\n`;
 
   if (params.topWallets && params.topWallets.length > 0) {
-    text += `<b>Top Tracked Targets:</b>\n`;
+    text += `<b>Tracked Target Wallets:</b>\n`;
     params.topWallets.slice(0, 5).forEach((w, idx) => {
       text += `  ${idx + 1}. <code>${w.label}</code> (${w.network}): <b>${w.balance}</b>\n`;
     });
@@ -182,9 +181,18 @@ export function formatSummaryMessage(params: {
   if (params.topCoins && params.topCoins.length > 0) {
     text += `<b>Active Coin Watchlist:</b>\n`;
     params.topCoins.slice(0, 5).forEach((c) => {
-      const priceStr = c.priceUsd ? formatTokenPrice(c.priceUsd).replace('@ ', '') : 'N/A';
+      const priceStr = c.priceUsd && c.priceUsd > 0
+        ? (c.priceUsd < 0.0001
+          ? `$${c.priceUsd.toFixed(8)}`
+          : c.priceUsd < 0.01
+            ? `$${c.priceUsd.toFixed(6)}`
+            : formatTokenPrice(c.priceUsd).replace('@ ', ''))
+        : 'N/A';
+      const changeStr = c.change24h !== null && c.change24h !== undefined
+        ? ` (${c.change24h > 0 ? '▲' : '▼'}${Math.abs(c.change24h).toFixed(2)}%)`
+        : '';
       const rsiStr = c.rsi ? ` | RSI: ${c.rsi.toFixed(1)}` : '';
-      text += `  • <b>${c.symbol.toUpperCase()}</b>: ${priceStr}${rsiStr}\n`;
+      text += `  • <b>${(c.symbol || '?').toUpperCase()}</b>: ${priceStr}${changeStr}${rsiStr}\n`;
     });
     text += `\n`;
   }

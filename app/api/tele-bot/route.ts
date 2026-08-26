@@ -95,6 +95,71 @@ const CHAIN_SLUG: Record<string, string> = {
   'robinhood': 'ethereum', // fallback
 };
 
+/** Moralis chain slug mapping for EVM */
+function getMoralisChain(network: string): string | null {
+  const net = (network || '').toUpperCase();
+  if (net === 'ETHEREUM' || net.includes('ETH')) return 'eth';
+  if (net === 'BASE' || net === 'BASE CHAIN') return 'base';
+  if (net === 'BSC' || net === 'BINANCE') return 'bsc';
+  return null;
+}
+
+/**
+ * Fetches live native coin balance for each wallet.
+ * EVM via Moralis, Solana via Alchemy RPC.
+ * Returns wallets enriched with a numeric `balanceUsd` (native balance in native coin units).
+ */
+async function fetchWalletBalancesLive(wallets: any[]): Promise<any[]> {
+  const moralisKey = process.env.MORALIS_API_KEY || '';
+  const solRpc = process.env.ALCHEMY_SOL_URL || 'https://api.mainnet-beta.solana.com';
+
+  return Promise.all(wallets.map(async (wallet: any) => {
+    let nativeBalance = 0;
+    const net = (wallet.chain_network || '').toUpperCase();
+    const moralisChain = getMoralisChain(net);
+
+    try {
+      if (moralisChain && moralisKey) {
+        // EVM native balance via Moralis
+        const res = await fetch(
+          `https://deep-index.moralis.io/api/v2.2/${wallet.wallet_address}/balance?chain=${moralisChain}`,
+          { headers: { 'Accept': 'application/json', 'X-API-Key': moralisKey } }
+        );
+        if (res.ok) {
+          const bData = await res.json();
+          if (bData.balance) nativeBalance = Number(bData.balance) / 1e18;
+        }
+      } else if (net === 'SOLANA') {
+        // Solana balance via JSON-RPC
+        const res = await fetch(solRpc, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0', id: 1, method: 'getBalance',
+            params: [wallet.wallet_address, { commitment: 'confirmed' }]
+          })
+        });
+        if (res.ok) {
+          const rpcData = await res.json();
+          const lamports = rpcData?.result?.value || 0;
+          nativeBalance = lamports / 1e9; // lamports -> SOL
+        }
+      }
+    } catch (_e) {
+      // silent fail — balance stays 0
+    }
+
+    return {
+      ...wallet,
+      nativeBalance,
+      balanceDisplay: nativeBalance > 0
+        ? `${nativeBalance.toFixed(4)} ${net === 'SOLANA' ? 'SOL' : net === 'BSC' ? 'BNB' : 'ETH'}`
+        : 'Unscanned'
+    };
+  }));
+}
+
+
 /**
  * Fetches live prices from DexScreener for a list of DB coin records.
  * Groups by chain and does batched API calls.
@@ -215,21 +280,18 @@ export async function POST(request: Request) {
           walletCount = wallets?.length || 0;
           coinCount = dbCoins?.length || 0;
 
-          // Build wallet list — balance column stores a USD number as text/float
-          topWallets = (wallets || []).map((w: any) => {
-            const bal = parseFloat(w.balance || '0');
-            return {
-              label: w.label || 'Target',
-              balance: isNaN(bal) || bal <= 0 ? 'Unscanned' : formatCompact(bal),
-              network: w.chain_network
-            };
-          });
+          // Fetch live native coin balances (not stored in DB)
+          const walletsWithBalance = await fetchWalletBalancesLive(wallets || []);
 
-          // Compute total net worth from wallet balances
-          totalNetWorth = (wallets || []).reduce((sum: number, w: any) => {
-            const bal = parseFloat(w.balance || '0');
-            return sum + (isNaN(bal) ? 0 : bal);
-          }, 0);
+          topWallets = walletsWithBalance.map((w: any) => ({
+            label: w.label || 'Target',
+            balance: w.balanceDisplay,
+            network: w.chain_network
+          }));
+
+          // For net worth we only count native balance (no USD conversion yet)
+          // Just count how many are scanned
+          totalNetWorth = 0; // native balance isn't in USD here — show count instead
 
           // Fetch live prices from DexScreener for tracked coins
           const enrichedCoins = await fetchCoinPricesFromDex(dbCoins || []);
@@ -258,11 +320,11 @@ export async function POST(request: Request) {
         if (supabase) {
           const { data: wallets } = await supabase.from('watchlist').select('*').order('created_at', { ascending: false });
           if (wallets && wallets.length > 0) {
-            wallets.forEach((w: any, i: number) => {
-              const bal = parseFloat(w.balance || '0');
-              const balStr = isNaN(bal) || bal <= 0 ? 'Unscanned' : formatCompact(bal);
+            // Fetch live native balances
+            const walletsWithBalance = await fetchWalletBalancesLive(wallets);
+            walletsWithBalance.forEach((w: any, i: number) => {
               text += `${i + 1}. <b>${w.label || 'Target'}</b> (<code>${w.wallet_address.slice(0, 6)}...${w.wallet_address.slice(-4)}</code>)\n`;
-              text += `   ⛓ ${w.chain_network} | Balance: <b>${balStr}</b>\n\n`;
+              text += `   ⛓ ${w.chain_network} | Balance: <b>${w.balanceDisplay}</b>\n\n`;
             });
           } else {
             text += `<i>No target wallets added yet.</i>\n`;
