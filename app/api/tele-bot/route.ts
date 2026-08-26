@@ -20,7 +20,7 @@ function getSupabase() {
 /**
  * GET: Telegram Bot Health Check & Connection Diagnostics
  */
-export async function GET() {
+export async function GET(request: Request) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
@@ -35,11 +35,30 @@ export async function GET() {
     const getMeRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
     const botData = await getMeRes.json();
 
+    // Check current webhook status
+    const webhookRes = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`);
+    const webhookData = await webhookRes.json();
+
+    // Auto-register webhook if we are on a public HTTPS domain and it's not set correctly
+    const url = new URL(request.url);
+    const hostUrl = `${url.protocol}//${url.host}/api/tele-bot`;
+    let webhookRegistered = webhookData?.result?.url === hostUrl;
+    
+    if (!webhookRegistered && url.protocol === 'https:') {
+       const setRes = await fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${hostUrl}`);
+       const setData = await setRes.json();
+       if (setData.ok) {
+         webhookRegistered = true;
+       }
+    }
+
     return NextResponse.json({
       configured: true,
       botOnline: botData.ok || false,
       botInfo: botData.result || null,
-      targetChatId: chatId
+      targetChatId: chatId,
+      webhookRegistered,
+      webhookUrl: webhookRegistered ? hostUrl : (webhookData?.result?.url || 'None')
     }, { status: 200 });
   } catch (error: any) {
     return NextResponse.json({
@@ -53,6 +72,101 @@ export async function GET() {
 /**
  * POST: Telegram Alert Dispatcher, Webhook & Radar Scanner
  */
+
+/** Compact number formatter for Telegram messages (no Intl dependency issues) */
+function formatCompact(val: number): string {
+  if (!val || val <= 0) return '-';
+  if (val >= 1e9) return `$${(val / 1e9).toFixed(1)}B`;
+  if (val >= 1e6) return `$${(val / 1e6).toFixed(1)}M`;
+  if (val >= 1e3) return `$${(val / 1e3).toFixed(1)}K`;
+  return `$${val.toFixed(2)}`;
+}
+
+/** Chain ID mapping for DexScreener API */
+const CHAIN_SLUG: Record<string, string> = {
+  'solana': 'solana',
+  'sol': 'solana',
+  'ethereum': 'ethereum',
+  'eth': 'ethereum',
+  'bsc': 'bsc',
+  'binance': 'bsc',
+  'base': 'base',
+  'base chain': 'base',
+  'robinhood': 'ethereum', // fallback
+};
+
+/**
+ * Fetches live prices from DexScreener for a list of DB coin records.
+ * Groups by chain and does batched API calls.
+ */
+async function fetchCoinPricesFromDex(dbCoins: any[]): Promise<any[]> {
+  if (!dbCoins || dbCoins.length === 0) return [];
+
+  // Group coins by chain slug
+  const byChain: Record<string, any[]> = {};
+  for (const coin of dbCoins) {
+    const slug = CHAIN_SLUG[(coin.chain_network || 'ethereum').toLowerCase()] || 'ethereum';
+    if (!byChain[slug]) byChain[slug] = [];
+    byChain[slug].push(coin);
+  }
+
+  const priceMap: Record<string, any> = {};
+
+  // Fetch from DexScreener per chain (max 30 per call)
+  for (const [chainSlug, coins] of Object.entries(byChain)) {
+    // Batch into groups of 30
+    for (let i = 0; i < coins.length; i += 30) {
+      const batch = coins.slice(i, i + 30);
+      const addresses = batch.map((c: any) => c.contract_address).join(',');
+      try {
+        const res = await fetch(`https://api.dexscreener.com/tokens/v1/${chainSlug}/${addresses}`, {
+          headers: { 'User-Agent': 'PelacakBot/1.0' }
+        });
+        if (!res.ok) continue;
+        const pairs: any[] = await res.json();
+        if (!Array.isArray(pairs)) continue;
+
+        // DexScreener returns all pairs — pick best pair per token (highest liquidity)
+        const bestPair: Record<string, any> = {};
+        for (const pair of pairs) {
+          const tokenAddr = (pair.baseToken?.address || '').toLowerCase();
+          const liq = pair.liquidity?.usd || 0;
+          if (!bestPair[tokenAddr] || liq > (bestPair[tokenAddr].liquidity?.usd || 0)) {
+            bestPair[tokenAddr] = pair;
+          }
+        }
+        for (const [addr, pair] of Object.entries(bestPair)) {
+          priceMap[addr] = {
+            symbol: pair.baseToken?.symbol || null,
+            name: pair.baseToken?.name || null,
+            priceUsd: parseFloat(pair.priceUsd || '0') || null,
+            change24h: pair.priceChange?.h24 ?? null,
+            volumeH24: pair.volume?.h24 ?? null,
+            marketCap: pair.marketCap ?? null,
+          };
+        }
+      } catch (e) {
+        // continue silently on network error
+      }
+    }
+  }
+
+  // Merge DB coin data with live prices
+  return dbCoins.map((coin: any) => {
+    const addrKey = (coin.contract_address || '').toLowerCase();
+    const live = priceMap[addrKey] || {};
+    return {
+      ...coin,
+      symbol: live.symbol || coin.label?.split(' ')[0] || '?',
+      name: live.name || coin.label || 'Unknown',
+      priceUsd: live.priceUsd ?? null,
+      change24h: live.change24h ?? null,
+      volumeH24: live.volumeH24 ?? null,
+      marketCap: live.marketCap ?? null,
+    };
+  });
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
@@ -96,11 +210,35 @@ export async function POST(request: Request) {
 
         if (supabase) {
           const { data: wallets } = await supabase.from('watchlist').select('*');
-          const { data: coins } = await supabase.from('tracked_coins').select('*');
+          const { data: dbCoins } = await supabase.from('tracked_coins').select('*');
+
           walletCount = wallets?.length || 0;
-          coinCount = coins?.length || 0;
-          topWallets = (wallets || []).map(w => ({ label: w.label || 'Target', balance: w.balance || '0.00', network: w.chain_network }));
-          topCoins = (coins || []).map(c => ({ symbol: c.symbol || c.label || 'Coin', priceUsd: c.price_usd }));
+          coinCount = dbCoins?.length || 0;
+
+          // Build wallet list — balance column stores a USD number as text/float
+          topWallets = (wallets || []).map((w: any) => {
+            const bal = parseFloat(w.balance || '0');
+            return {
+              label: w.label || 'Target',
+              balance: isNaN(bal) || bal <= 0 ? 'Unscanned' : formatCompact(bal),
+              network: w.chain_network
+            };
+          });
+
+          // Compute total net worth from wallet balances
+          totalNetWorth = (wallets || []).reduce((sum: number, w: any) => {
+            const bal = parseFloat(w.balance || '0');
+            return sum + (isNaN(bal) ? 0 : bal);
+          }, 0);
+
+          // Fetch live prices from DexScreener for tracked coins
+          const enrichedCoins = await fetchCoinPricesFromDex(dbCoins || []);
+          topCoins = enrichedCoins.map((c: any) => ({
+            symbol: c.symbol || c.label || 'COIN',
+            priceUsd: c.priceUsd,
+            change24h: c.change24h,
+            volumeH24: c.volumeH24
+          }));
         }
 
         const msg = formatSummaryMessage({
@@ -120,9 +258,11 @@ export async function POST(request: Request) {
         if (supabase) {
           const { data: wallets } = await supabase.from('watchlist').select('*').order('created_at', { ascending: false });
           if (wallets && wallets.length > 0) {
-            wallets.forEach((w, i) => {
+            wallets.forEach((w: any, i: number) => {
+              const bal = parseFloat(w.balance || '0');
+              const balStr = isNaN(bal) || bal <= 0 ? 'Unscanned' : formatCompact(bal);
               text += `${i + 1}. <b>${w.label || 'Target'}</b> (<code>${w.wallet_address.slice(0, 6)}...${w.wallet_address.slice(-4)}</code>)\n`;
-              text += `   ⛓ ${w.chain_network} | Balance: <b>${w.balance || '0'}</b>\n\n`;
+              text += `   ⛓ ${w.chain_network} | Balance: <b>${balStr}</b>\n\n`;
             });
           } else {
             text += `<i>No target wallets added yet.</i>\n`;
@@ -135,11 +275,26 @@ export async function POST(request: Request) {
       if (incomingText.startsWith('/coins')) {
         let text = `🪙 <b>TRACKED COIN WATCHLIST</b>\n\n`;
         if (supabase) {
-          const { data: coins } = await supabase.from('tracked_coins').select('*').order('created_at', { ascending: false });
-          if (coins && coins.length > 0) {
-            coins.forEach((c, i) => {
-              text += `${i + 1}. <b>${c.name || c.symbol || 'Coin'} (${c.symbol?.toUpperCase() || '?'})</b>\n`;
-              text += `   💵 Price: <b>$${c.price_usd || '0.00'}</b> | 24h: <b>${c.price_change_h24 || 0}%</b>\n\n`;
+          const { data: dbCoins } = await supabase.from('tracked_coins').select('*').order('created_at', { ascending: false });
+          if (dbCoins && dbCoins.length > 0) {
+            // Fetch live prices from DexScreener
+            const enrichedCoins = await fetchCoinPricesFromDex(dbCoins);
+            enrichedCoins.forEach((c: any, i: number) => {
+              const priceStr = c.priceUsd && c.priceUsd > 0
+                ? (c.priceUsd < 0.0001
+                  ? `$${c.priceUsd.toFixed(8)}`
+                  : c.priceUsd < 0.01
+                    ? `$${c.priceUsd.toFixed(6)}`
+                    : `$${c.priceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`)
+                : '<i>N/A</i>';
+              const changeStr = c.change24h !== null && c.change24h !== undefined
+                ? ` | 24h: <b>${c.change24h > 0 ? '▲' : '▼'}${Math.abs(c.change24h).toFixed(2)}%</b>`
+                : '';
+              const volStr = c.volumeH24 && c.volumeH24 > 0
+                ? `\n   📊 Vol 24h: <b>${formatCompact(c.volumeH24)}</b>`
+                : '';
+              text += `${i + 1}. <b>${c.name} (${(c.symbol || '?').toUpperCase()})</b>\n`;
+              text += `   💵 Price: <b>${priceStr}</b>${changeStr}${volStr}\n\n`;
             });
           } else {
             text += `<i>No coins tracked yet.</i>\n`;

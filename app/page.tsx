@@ -1355,7 +1355,7 @@ export default function Dashboard() {
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                           
                           {/* 1. Wallet Identity */}
-                          <div className="flex items-center gap-3.5 w-full lg:w-[260px] shrink-0">
+                          <div className="flex items-center gap-3.5 w-full lg:w-[260px] shrink-0 min-w-0">
                             <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-base shadow-xs shrink-0 border border-blue-200/60">
                               <Wallet size={18} />
                             </div>
@@ -1955,7 +1955,7 @@ export default function Dashboard() {
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                           
                           {/* 1. Token Identity */}
-                          <div className="flex items-center gap-3.5 w-full lg:w-[260px] shrink-0">
+                          <div className="flex items-center gap-3.5 w-full lg:w-[260px] shrink-0 min-w-0">
                             {coin.logo ? (
                               <img src={coin.logo} alt={coin.symbol} className="w-10 h-10 rounded-full bg-white shadow-xs object-cover border border-slate-100 shrink-0" />
                             ) : (
@@ -2202,7 +2202,7 @@ export default function Dashboard() {
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                         
                         {/* 1. Identity */}
-                        <div className="flex items-center gap-3.5 w-full lg:w-[260px] shrink-0">
+                        <div className="flex items-center gap-3.5 w-full lg:w-[260px] shrink-0 min-w-0">
                           <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-base shadow-xs shrink-0 border border-rose-200/60">
                             <Ban size={18} />
                           </div>
@@ -2439,7 +2439,7 @@ export default function Dashboard() {
                           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                             
                             {/* 1. Coin / Asset Identity */}
-                            <div className="flex items-center gap-3.5 w-full lg:w-[260px] shrink-0">
+                            <div className="flex items-center gap-3.5 w-full lg:w-[260px] shrink-0 min-w-0">
                               <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200/80 overflow-hidden flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
                                 {token.logo ? (
                                   <img src={token.logo} alt={token.symbol} className="w-full h-full object-cover" />
