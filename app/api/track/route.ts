@@ -15,6 +15,7 @@ interface TrackedCoin {
   chain_network: string;
   label?: string;
   created_at?: string;
+  is_primary?: boolean;
 }
 
 interface DexPair {
@@ -99,6 +100,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from('tracked_coins')
       .select('*')
+      .order('is_primary', { ascending: false })
       .order('created_at', { ascending: false });
 
     if (error || !data) return NextResponse.json([]);
@@ -128,6 +130,7 @@ export async function GET() {
           dex_url: dex?.url ?? `https://dexscreener.com/search?q=${coin.contract_address}`,
           logo: dex?.info?.imageUrl ?? null,
           total_holders: totalHolders,
+          is_primary: coin.is_primary ?? false,
         };
       })
     );
@@ -200,5 +203,49 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 200 });
+  }
+}
+
+/**
+ * PATCH: Toggle is_primary flag for a tracked coin (max 3 primary at once)
+ */
+export async function PATCH(request: Request) {
+  try {
+    const supabase = getSupabase();
+    if (!supabase) return NextResponse.json({ error: 'Supabase belum terkonfigurasi' }, { status: 500 });
+
+    const { contract_address, is_primary } = await request.json();
+    if (!contract_address) return NextResponse.json({ error: 'contract_address wajib diisi' }, { status: 400 });
+
+    const cleanAddress = contract_address.toString().trim();
+
+    // Enforce max 3 primary coins
+    if (is_primary === true) {
+      const { data: existing } = await supabase
+        .from('tracked_coins')
+        .select('contract_address')
+        .eq('is_primary', true);
+
+      const currentPrimary = (existing || []).filter(
+        (c: any) => c.contract_address.toLowerCase() !== cleanAddress.toLowerCase()
+      );
+
+      if (currentPrimary.length >= 3) {
+        return NextResponse.json({
+          error: 'Maksimal 3 coin utama. Lepas pin dari coin lain terlebih dahulu.',
+          limitReached: true
+        }, { status: 400 });
+      }
+    }
+
+    const { error } = await supabase
+      .from('tracked_coins')
+      .update({ is_primary: is_primary === true })
+      .eq('contract_address', cleanAddress);
+
+    if (error) throw error;
+    return NextResponse.json({ success: true, is_primary: is_primary === true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

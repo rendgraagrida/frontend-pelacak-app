@@ -164,14 +164,47 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Database belum terkonfigurasi" }, { status: 500 });
     }
 
-    const { wallet_address, chain_network, label } = await request.json();
+    const body = await request.json();
+    const { wallet_address, chain_network, label, is_primary } = body;
     if (!wallet_address || !chain_network) {
       return NextResponse.json({ error: "Data dompet tidak lengkap" }, { status: 400 });
     }
 
     const safeAddress = wallet_address.toString().trim();
-    const newLabel = (label || "Unknown Target").trim();
 
+    // Handle is_primary toggle separately
+    if (is_primary !== undefined) {
+      // Enforce max 3 primary wallets
+      if (is_primary === true) {
+        const { data: existing } = await supabase
+          .from('watchlist')
+          .select('wallet_address')
+          .eq('is_primary', true);
+
+        const currentPrimary = (existing || []).filter(
+          (w: any) => w.wallet_address.toLowerCase() !== safeAddress.toLowerCase()
+        );
+
+        if (currentPrimary.length >= 3) {
+          return NextResponse.json({
+            error: 'Maksimal 3 wallet utama. Lepas pin dari wallet lain terlebih dahulu.',
+            limitReached: true
+          }, { status: 400 });
+        }
+      }
+
+      // Toggle is_primary for ALL network rows of this wallet
+      const { error } = await supabase
+        .from('watchlist')
+        .update({ is_primary: is_primary === true })
+        .eq('wallet_address', safeAddress);
+
+      if (error) throw error;
+      return NextResponse.json({ success: true, is_primary: is_primary === true });
+    }
+
+    // Handle label update
+    const newLabel = (label || "Unknown Target").trim();
     const { data, error } = await supabase
       .from('watchlist')
       .update({ label: newLabel })

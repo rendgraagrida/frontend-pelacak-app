@@ -4,7 +4,7 @@ import React, { useState, useEffect, Fragment, useRef } from 'react';
 import axios from 'axios';
 import { 
   LayoutGrid, ShieldCheck, Plus, X, ChevronDown, ChevronUp, 
-  Loader2, Copy, Check, ExternalLink, Wallet, Trash2, ArrowUpDown, Filter, Search, AlertTriangle, Shield, Ban, RefreshCw, TrendingUp, TrendingDown, Activity, Users, Clock, Timer, History, Pencil, Send, Radio
+  Loader2, Copy, Check, ExternalLink, Wallet, Trash2, ArrowUpDown, Filter, Search, AlertTriangle, Shield, Ban, RefreshCw, TrendingUp, TrendingDown, Activity, Users, Clock, Timer, History, Pencil, Send, Radio, Star
 } from 'lucide-react';
 import TradeHistoryModal from './components/TradeHistoryModal';
 import { truncateAddress, formatCompactUSD, formatCompactNumber } from '@/app/lib/utils';
@@ -14,6 +14,7 @@ interface WalletItem {
   wallet_address: string;
   chain_network: string;
   label?: string;
+  is_primary?: boolean;
 }
 
 interface TokenItem {
@@ -52,6 +53,7 @@ interface TrackedCoin {
   dex_url?: string;
   logo?: string | null;
   total_holders?: number | null;
+  is_primary?: boolean;
 }
 
 const getWalletTag = (address: string) => {
@@ -873,6 +875,63 @@ export default function Dashboard() {
     } catch (error) {}
   };
 
+  const handleTogglePrimaryCoin = async (coin: TrackedCoin) => {
+    const newVal = !coin.is_primary;
+    // Optimistic update
+    setTrackedCoins(prev => prev.map(c =>
+      c.contract_address === coin.contract_address ? { ...c, is_primary: newVal } : c
+    ));
+    try {
+      const res = await axios.patch('/api/track', {
+        contract_address: coin.contract_address,
+        is_primary: newVal
+      });
+      if (res.data?.limitReached || res.data?.error) {
+        alert(res.data.error || 'Maksimal 3 coin utama.');
+        // Rollback
+        setTrackedCoins(prev => prev.map(c =>
+          c.contract_address === coin.contract_address ? { ...c, is_primary: coin.is_primary } : c
+        ));
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.error || 'Gagal mengubah status pin.';
+      alert(msg);
+      // Rollback
+      setTrackedCoins(prev => prev.map(c =>
+        c.contract_address === coin.contract_address ? { ...c, is_primary: coin.is_primary } : c
+      ));
+    }
+  };
+
+  const handleTogglePrimaryWallet = async (wallet: WalletItem) => {
+    const newVal = !wallet.is_primary;
+    // Optimistic update
+    setWallets(prev => prev.map(w =>
+      w.wallet_address === wallet.wallet_address ? { ...w, is_primary: newVal } : w
+    ));
+    try {
+      const res = await axios.patch('/api/watchlist', {
+        wallet_address: wallet.wallet_address,
+        chain_network: wallet.chain_network,
+        is_primary: newVal
+      });
+      if (res.data?.limitReached || res.data?.error) {
+        alert(res.data.error || 'Maksimal 3 wallet utama.');
+        // Rollback
+        setWallets(prev => prev.map(w =>
+          w.wallet_address === wallet.wallet_address ? { ...w, is_primary: wallet.is_primary } : w
+        ));
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.error || 'Gagal mengubah status pin.';
+      alert(msg);
+      // Rollback
+      setWallets(prev => prev.map(w =>
+        w.wallet_address === wallet.wallet_address ? { ...w, is_primary: wallet.is_primary } : w
+      ));
+    }
+  };
+
   // Helper: mark a specific contract as spam/non-spam in all cached wallet data (no full reset)
   const patchTokenSpamStatus = (contractAddress: string, isSpam: boolean) => {
     setWalletTokens(prev => {
@@ -1350,7 +1409,11 @@ export default function Dashboard() {
                     return (
                       <div 
                         key={`${memoryKey}-${index}`} 
-                        className="bg-white rounded-xl shadow-xs border border-slate-200/90 hover:border-slate-300 hover:shadow-md transition-all p-4.5 overflow-hidden"
+                        className={`bg-white rounded-xl shadow-xs border transition-all p-4.5 overflow-hidden ${
+                          wallet.is_primary
+                            ? 'border-amber-300 shadow-amber-100 hover:shadow-amber-200 ring-1 ring-amber-200/60'
+                            : 'border-slate-200/90 hover:border-slate-300 hover:shadow-md'
+                        }`}
                       >
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                           
@@ -1470,6 +1533,19 @@ export default function Dashboard() {
 
                           {/* 3. Action Buttons */}
                           <div className="w-full lg:w-auto lg:shrink-0 flex items-center lg:justify-end gap-1.5 self-start lg:self-center">
+                            {/* ⭐ Primary Pin Button */}
+                            <button
+                              onClick={() => handleTogglePrimaryWallet(wallet)}
+                              className={`px-3 py-1.5 rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-all border shadow-2xs ${
+                                wallet.is_primary
+                                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-600 border-amber-300'
+                                  : 'bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 border-slate-200'
+                              }`}
+                              title={wallet.is_primary ? 'Lepas dari Primary Monitor' : 'Jadikan Primary Monitor (maks 3)'}
+                            >
+                              <Star size={13} className={wallet.is_primary ? 'fill-amber-400 text-amber-400' : ''} />
+                              <span>{wallet.is_primary ? 'Primary' : 'Pin'}</span>
+                            </button>
                             {isSupported ? (
                               <button 
                                 onClick={() => handleToggleTokens(wallet.wallet_address, wallet.chain_network)}
@@ -1950,7 +2026,11 @@ export default function Dashboard() {
                     return (
                       <div 
                         key={idx} 
-                        className="bg-white rounded-xl shadow-xs border border-slate-200/90 hover:border-slate-300 hover:shadow-md transition-all p-4.5 overflow-hidden"
+                        className={`bg-white rounded-xl shadow-xs border transition-all p-4.5 overflow-hidden ${
+                          coin.is_primary
+                            ? 'border-amber-300 shadow-amber-100 hover:shadow-amber-200 ring-1 ring-amber-200/60'
+                            : 'border-slate-200/90 hover:border-slate-300 hover:shadow-md'
+                        }`}
                       >
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                           
@@ -2055,6 +2135,19 @@ export default function Dashboard() {
 
                           {/* 3. Spacious Action Buttons Bar */}
                           <div className="w-full lg:w-auto lg:shrink-0 flex items-center lg:justify-end gap-1.5 self-start lg:self-center">
+                            {/* ⭐ Primary Pin Button */}
+                            <button
+                              onClick={() => handleTogglePrimaryCoin(coin)}
+                              className={`px-3 py-1.5 rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-all border shadow-2xs ${
+                                coin.is_primary
+                                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-600 border-amber-300'
+                                  : 'bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 border-slate-200'
+                              }`}
+                              title={coin.is_primary ? 'Lepas dari Primary Monitor' : 'Jadikan Primary Monitor (maks 3)'}
+                            >
+                              <Star size={13} className={coin.is_primary ? 'fill-amber-400 text-amber-400' : ''} />
+                              <span>{coin.is_primary ? 'Primary' : 'Pin'}</span>
+                            </button>
                             <TradeHistoryModal coin={coin} />
                             
                             <button 

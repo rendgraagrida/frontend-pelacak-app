@@ -274,8 +274,8 @@ export async function POST(request: Request) {
         let topCoins: any[] = [];
 
         if (supabase) {
-          const { data: wallets } = await supabase.from('watchlist').select('*');
-          const { data: dbCoins } = await supabase.from('tracked_coins').select('*');
+          const { data: wallets } = await supabase.from('watchlist').select('*').order('is_primary', { ascending: false });
+          const { data: dbCoins } = await supabase.from('tracked_coins').select('*').order('is_primary', { ascending: false });
 
           walletCount = wallets?.length || 0;
           coinCount = dbCoins?.length || 0;
@@ -286,7 +286,8 @@ export async function POST(request: Request) {
           topWallets = walletsWithBalance.map((w: any) => ({
             label: w.label || 'Target',
             balance: w.balanceDisplay,
-            network: w.chain_network
+            network: w.chain_network,
+            isPrimary: w.is_primary
           }));
 
           // For net worth we only count native balance (no USD conversion yet)
@@ -299,7 +300,8 @@ export async function POST(request: Request) {
             symbol: c.symbol || c.label || 'COIN',
             priceUsd: c.priceUsd,
             change24h: c.change24h,
-            volumeH24: c.volumeH24
+            volumeH24: c.volumeH24,
+            isPrimary: c.is_primary
           }));
         }
 
@@ -318,12 +320,13 @@ export async function POST(request: Request) {
       if (incomingText.startsWith('/watchlist')) {
         let text = `🎯 <b>TRACKED TARGET WALLETS</b>\n\n`;
         if (supabase) {
-          const { data: wallets } = await supabase.from('watchlist').select('*').order('created_at', { ascending: false });
+          const { data: wallets } = await supabase.from('watchlist').select('*').order('is_primary', { ascending: false }).order('created_at', { ascending: false });
           if (wallets && wallets.length > 0) {
             // Fetch live native balances
             const walletsWithBalance = await fetchWalletBalancesLive(wallets);
             walletsWithBalance.forEach((w: any, i: number) => {
-              text += `${i + 1}. <b>${w.label || 'Target'}</b> (<code>${w.wallet_address.slice(0, 6)}...${w.wallet_address.slice(-4)}</code>)\n`;
+              const icon = w.is_primary ? '⭐' : `${i + 1}.`;
+              text += `${icon} <b>${w.label || 'Target'}</b> (<code>${w.wallet_address.slice(0, 6)}...${w.wallet_address.slice(-4)}</code>)\n`;
               text += `   ⛓ ${w.chain_network} | Balance: <b>${w.balanceDisplay}</b>\n\n`;
             });
           } else {
@@ -337,7 +340,7 @@ export async function POST(request: Request) {
       if (incomingText.startsWith('/coins')) {
         let text = `🪙 <b>TRACKED COIN WATCHLIST</b>\n\n`;
         if (supabase) {
-          const { data: dbCoins } = await supabase.from('tracked_coins').select('*').order('created_at', { ascending: false });
+          const { data: dbCoins } = await supabase.from('tracked_coins').select('*').order('is_primary', { ascending: false }).order('created_at', { ascending: false });
           if (dbCoins && dbCoins.length > 0) {
             // Fetch live prices from DexScreener
             const enrichedCoins = await fetchCoinPricesFromDex(dbCoins);
