@@ -2128,12 +2128,12 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Portfolio Assets Table */}
-                <div className="bg-white rounded-xl shadow-xs border border-slate-200 overflow-hidden">
-                  <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+                {/* Portfolio Assets Cards List */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
                     <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                       <Wallet size={16} className="text-emerald-600" />
-                      Holdings & Token Balances
+                      Holdings & Asset Breakdown
                     </h3>
                     <span className="text-xs text-slate-500 font-medium">
                       {myWalletTokens.filter(t => !t.is_spam).length} assets detected
@@ -2141,103 +2141,152 @@ export default function Dashboard() {
                   </div>
 
                   {myWalletLoading && myWalletTokens.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-3">
-                      <Loader2 size={32} className="animate-spin text-emerald-500" />
-                      <p className="text-sm font-medium">Scanning blockchain balances...</p>
+                    <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl shadow-xs border border-slate-200">
+                      <Loader2 size={32} className="animate-spin text-emerald-600 mb-4" />
+                      <p className="text-slate-500 font-medium text-sm">Scanning on-chain portfolio balances...</p>
+                    </div>
+                  ) : myWalletTokens.filter(t => !t.is_spam).length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 bg-white rounded-xl shadow-xs border border-slate-200 border-dashed">
+                      <div className="bg-emerald-50 p-4 rounded-full mb-3">
+                        <Wallet size={28} className="text-emerald-600" />
+                      </div>
+                      <h3 className="text-base font-bold text-slate-800">No token assets detected</h3>
+                      <p className="text-slate-500 text-xs mt-1 max-w-sm text-center">
+                        This wallet does not currently hold significant non-spam token balances on {connectedNetwork || 'the selected network'}.
+                      </p>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
-                          <tr>
-                            <th className="px-6 py-3.5">Asset / Token</th>
-                            <th className="px-6 py-3.5 text-right">Balance</th>
-                            <th className="px-6 py-3.5 text-right">Live Price</th>
-                            <th className="px-6 py-3.5 text-right">Total Value (USD)</th>
-                            <th className="px-6 py-3.5 text-right">Quick Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {myWalletTokens.filter(t => !t.is_spam).length === 0 ? (
-                            <tr>
-                              <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                                No significant token assets detected in this wallet.
-                              </td>
-                            </tr>
-                          ) : (
-                            myWalletTokens.filter(t => !t.is_spam).map((token, idx) => (
-                              <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
-                                <td className="px-6 py-4 flex items-center gap-3">
-                                  <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0 shadow-2xs">
-                                    {token.logo ? (
-                                      <img src={token.logo} alt={token.symbol} className="w-full h-full object-cover" />
-                                    ) : (
-                                      <div className="text-xs font-bold text-slate-600">{token.symbol.slice(0, 2).toUpperCase()}</div>
-                                    )}
-                                  </div>
-                                  <div>
-                                    <div className="font-bold text-slate-900 text-sm leading-tight">{token.name}</div>
-                                    <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 font-mono">
-                                      <span className="font-sans font-semibold text-slate-700">{token.symbol}</span>
-                                      {token.contract_address !== 'NATIVE_COIN' && (
-                                        <>
-                                          <span className="text-[10px]">•</span>
-                                          <span>{truncateAddress(token.contract_address, 6, 4)}</span>
-                                        </>
-                                      )}
-                                      {token.injected_chain && (
-                                        <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ml-1 border border-slate-200/60">
-                                          {token.injected_chain}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="px-6 py-4 text-right font-mono font-semibold text-slate-800 text-xs">
-                                  {token.balance}
-                                </td>
-                                <td className="px-6 py-4 text-right font-mono font-medium text-slate-600 text-xs">
-                                  {formatTokenPrice(token.price_usd).replace('@ ', '')}
-                                </td>
-                                <td className="px-6 py-4 text-right font-mono font-bold text-slate-900 text-sm">
-                                  {formatCurrency(token.total_value_usd)}
-                                </td>
-                                <td className="px-6 py-4 text-right font-sans">
-                                  <div className="flex items-center justify-end gap-2">
-                                    {token.contract_address !== 'NATIVE_COIN' && (
-                                      <>
-                                        <button 
-                                          onClick={() => handleViewHistory(connectedWallet, token.contract_address, connectedNetwork || 'solana', token.symbol || token.name, token.price_usd || 0)}
-                                          className="px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold text-[11px] border border-purple-200/60 flex items-center gap-1 transition-colors"
-                                          title="View transaction history"
-                                        >
-                                          <History size={11} /> History
-                                        </button>
-                                        <button 
-                                          onClick={() => handleQuickTrack(token.contract_address, token.name || token.symbol, connectedNetwork || 'solana')}
-                                          className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-[11px] border border-blue-200/60 flex items-center gap-1 transition-colors"
-                                          title="Add to Coin Tracker"
-                                        >
-                                          <Activity size={11} /> Track
-                                        </button>
-                                      </>
-                                    )}
-                                    <a
-                                      href={getDexScreenerUrl(connectedNetwork || 'solana', token.contract_address)}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] border border-slate-200 flex items-center gap-1 transition-colors"
-                                      title="Open Live DexScreener Chart"
+                    <div className="space-y-3">
+                      {myWalletTokens.filter(t => !t.is_spam).map((token, idx) => (
+                        <div 
+                          key={idx} 
+                          className="bg-white rounded-xl shadow-xs border border-slate-200/90 hover:border-slate-300 hover:shadow-md transition-all p-4.5 overflow-hidden"
+                        >
+                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                            
+                            {/* 1. Coin / Asset Identity */}
+                            <div className="flex items-center gap-3.5 min-w-[260px] lg:max-w-[300px]">
+                              <div className="w-11 h-11 rounded-full bg-slate-100 border border-slate-200/80 overflow-hidden flex items-center justify-center font-bold text-base shadow-xs shrink-0">
+                                {token.logo ? (
+                                  <img src={token.logo} alt={token.symbol} className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="text-xs font-bold text-slate-700">{token.symbol?.slice(0, 2).toUpperCase()}</div>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <h3 className="font-bold text-slate-900 text-base leading-tight truncate" title={token.name}>
+                                    {token.name}
+                                  </h3>
+                                  <span className="text-xs font-bold text-slate-400 font-mono">
+                                    {token.symbol}
+                                  </span>
+                                </div>
+                                <div className="flex items-center flex-wrap gap-1.5 mt-1">
+                                  <span className="text-[10px] font-bold tracking-wider uppercase bg-emerald-50 text-emerald-700 border border-emerald-200/60 px-1.5 py-0.5 rounded">
+                                    {token.injected_chain || connectedNetwork || 'Unknown'}
+                                  </span>
+                                  {token.contract_address === 'NATIVE_COIN' && (
+                                    <span className="text-[10px] font-bold uppercase bg-blue-50 text-blue-700 border border-blue-200/60 px-1.5 py-0.5 rounded">
+                                      CORE
+                                    </span>
+                                  )}
+                                </div>
+                                {token.contract_address !== 'NATIVE_COIN' ? (
+                                  <div className="flex items-center gap-1.5 mt-1 text-[11px] font-mono text-slate-400">
+                                    <span>{truncateAddress(token.contract_address, 6, 4)}</span>
+                                    <button 
+                                      onClick={() => handleCopy(token.contract_address)}
+                                      className="text-slate-400 hover:text-slate-700 transition-colors"
+                                      title="Copy contract address"
                                     >
-                                      Chart <ExternalLink size={10} />
-                                    </a>
+                                      {copiedAddress === token.contract_address ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
+                                    </button>
                                   </div>
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
+                                ) : (
+                                  <div className="text-[11px] text-slate-400 mt-1 font-semibold">Native Blockchain Currency</div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* 2. Metrics Grid (Live Price, Balance / Holdings, Total USD Value) */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50/70 p-3 rounded-xl border border-slate-100 flex-1">
+                              {/* Live Price */}
+                              <div>
+                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Live Price</p>
+                                <p className="text-sm font-bold text-slate-900 mt-1 font-mono">
+                                  {formatTokenPrice(token.price_usd).replace('@ ', '')}
+                                </p>
+                                <p className="text-[11px] text-slate-500 mt-0.5">DexScreener Index</p>
+                              </div>
+
+                              {/* Wallet Balance */}
+                              <div>
+                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Wallet Balance</p>
+                                <p className="text-sm font-bold text-slate-900 mt-1 font-mono">
+                                  {token.balance} <span className="text-xs text-slate-500 font-sans">{token.symbol}</span>
+                                </p>
+                                <p className="text-[11px] text-slate-500 mt-0.5">Holdings Quantity</p>
+                              </div>
+
+                              {/* Total Value USD */}
+                              <div>
+                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Total Value</p>
+                                <p className="text-base font-bold text-emerald-600 mt-0.5 font-mono">
+                                  {formatCurrency(token.total_value_usd)}
+                                </p>
+                                <p className="text-[11px] text-slate-500 mt-0.5">USD Valuation</p>
+                              </div>
+                            </div>
+
+                            {/* 3. Action Buttons */}
+                            <div className="flex items-center flex-wrap sm:flex-nowrap gap-2 self-start lg:self-center shrink-0">
+                              {token.contract_address !== 'NATIVE_COIN' && (
+                                <>
+                                  <button 
+                                    onClick={() => handleViewHistory(connectedWallet, token.contract_address, connectedNetwork || 'solana', token.symbol || token.name, token.price_usd || 0)}
+                                    className="px-3 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-purple-200/60 shadow-2xs"
+                                    title="View transaction history"
+                                  >
+                                    <History size={13} />
+                                    <span>History</span>
+                                  </button>
+
+                                  <button 
+                                    onClick={() => handleQuickTrack(token.contract_address, token.name || token.symbol, connectedNetwork || 'solana')}
+                                    className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-blue-200/60 shadow-2xs"
+                                    title="Add to Coin Tracker"
+                                  >
+                                    <Activity size={13} />
+                                    <span>Track</span>
+                                  </button>
+
+                                  <button 
+                                    onClick={() => handleQuickBlacklist(token.contract_address, token.name || token.symbol, connectedNetwork || 'solana')}
+                                    className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-rose-200/60 shadow-2xs"
+                                    title="Add to Blacklist"
+                                  >
+                                    <Ban size={13} />
+                                    <span>Blacklist</span>
+                                  </button>
+                                </>
+                              )}
+
+                              <a 
+                                href={getDexScreenerUrl(connectedNetwork || 'solana', token.contract_address)}
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-slate-200 shadow-2xs"
+                                title="Open Live DexScreener Chart"
+                              >
+                                <span>Chart</span>
+                                <ExternalLink size={12} />
+                              </a>
+                            </div>
+
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
