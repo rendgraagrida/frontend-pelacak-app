@@ -141,13 +141,13 @@ export default function TradeHistoryModal({ coin }: TradeHistoryModalProps) {
   const formatRelativeTime = (isoString: string): string => {
     try {
       const diffSec = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
-      if (diffSec < 60) return `${diffSec}s lalu`;
+      if (diffSec < 60) return `${diffSec}s ago`;
       const mins = Math.floor(diffSec / 60);
-      if (mins < 60) return `${mins}m lalu`;
+      if (mins < 60) return `${mins}m ago`;
       const hours = Math.floor(mins / 60);
-      if (hours < 24) return `${hours}j lalu`;
+      if (hours < 24) return `${hours}h ago`;
       const days = Math.floor(hours / 24);
-      return `${days}h lalu`;
+      return `${days}d ago`;
     } catch {
       return isoString;
     }
@@ -168,10 +168,10 @@ export default function TradeHistoryModal({ coin }: TradeHistoryModalProps) {
       <button 
         onClick={() => setIsOpen(true)} 
         className="px-3 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-purple-200/60 shadow-2xs"
-        title="Lihat riwayat transaksi Buy/Sell Live"
+        title="View Live On-chain DEX Transactions"
       >
-        <History size={13} className="text-purple-600" />
-        <span>Buy/Sell</span>
+        <Activity size={13} className="text-purple-600" />
+        <span>Transactions</span>
       </button>
 
       {isOpen && (
@@ -191,7 +191,7 @@ export default function TradeHistoryModal({ coin }: TradeHistoryModalProps) {
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-bold text-slate-900">
-                      Live Trades — {displayName}
+                      Live Transactions — {displayName}
                     </h2>
                     <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-100 text-purple-700 uppercase">
                       {pool?.name || effectiveChain}
@@ -225,12 +225,12 @@ export default function TradeHistoryModal({ coin }: TradeHistoryModalProps) {
                   onClick={fetchTrades}
                   disabled={loading}
                   className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 rounded-lg transition-colors"
-                  title="Refresh trades"
+                  title="Refresh transactions"
                 >
                   <RefreshCw size={16} className={loading ? "animate-spin text-purple-600" : ""} />
                 </button>
                 <button 
-                  onClick={() => setIsOpen(false)}
+                  onClick={() => setIsOpen(false)} 
                   className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition-colors"
                 >
                   <X size={20} />
@@ -247,7 +247,7 @@ export default function TradeHistoryModal({ coin }: TradeHistoryModalProps) {
                   <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 shadow-xs">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
                       <Activity size={14} className="text-slate-400" />
-                      <span>Total Transaksi</span>
+                      <span>Total Transactions</span>
                     </div>
                     <div className="text-lg font-bold text-slate-900 mt-1">
                       {stats.totalTrades} <span className="text-xs font-normal text-slate-500">trades</span>
@@ -299,7 +299,7 @@ export default function TradeHistoryModal({ coin }: TradeHistoryModalProps) {
                       filterType === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    Semua ({trades.length})
+                    All ({trades.length})
                   </button>
                   <button
                     onClick={() => setFilterType('buy')}
@@ -328,7 +328,7 @@ export default function TradeHistoryModal({ coin }: TradeHistoryModalProps) {
                 </div>
 
                 <span className="text-xs text-slate-500 font-medium">
-                  Menampilkan {filteredTrades.length} transaksi terbaru
+                  Showing {filteredTrades.length} recent transactions
                 </span>
               </div>
 
@@ -336,7 +336,7 @@ export default function TradeHistoryModal({ coin }: TradeHistoryModalProps) {
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
                   <Loader2 size={36} className="animate-spin text-purple-600" />
-                  <p className="text-sm font-medium">Mengambil data transaksi DEX real-time...</p>
+                  <p className="text-sm font-medium">Fetching real-time DEX transactions...</p>
                 </div>
               ) : error ? (
                 <div className="text-center py-10 px-4 text-rose-600 bg-rose-50/80 rounded-xl border border-rose-200">
@@ -345,25 +345,25 @@ export default function TradeHistoryModal({ coin }: TradeHistoryModalProps) {
                     onClick={fetchTrades} 
                     className="mt-3 px-4 py-1.5 bg-rose-600 text-white text-xs font-semibold rounded-lg hover:bg-rose-700 transition-colors shadow-xs"
                   >
-                    Coba Lagi
+                    Retry
                   </button>
                 </div>
               ) : filteredTrades.length === 0 ? (
                 <div className="text-center py-12 text-slate-500 bg-slate-50 rounded-xl border border-slate-200">
                   <History size={32} className="mx-auto text-slate-400 mb-2 opacity-60" />
-                  <p className="font-semibold text-sm">Tidak ada transaksi ditemukan untuk filter ini.</p>
+                  <p className="font-semibold text-sm">No transactions found for this filter.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-xs bg-white">
                   <table className="w-full text-xs text-left">
                     <thead className="text-[11px] font-bold text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
                       <tr>
-                        <th className="px-4 py-3">Tipe</th>
-                        <th className="px-4 py-3">Harga (USD)</th>
-                        <th className="px-4 py-3">Jumlah Token</th>
+                        <th className="px-4 py-3">Type</th>
+                        <th className="px-4 py-3">Price (USD)</th>
+                        <th className="px-4 py-3">Token Amount</th>
                         <th className="px-4 py-3">Volume USD</th>
                         <th className="px-4 py-3">Trader / Maker</th>
-                        <th className="px-4 py-3">Waktu</th>
+                        <th className="px-4 py-3">Time</th>
                         <th className="px-4 py-3 text-right">Tx Hash</th>
                       </tr>
                     </thead>
@@ -430,7 +430,7 @@ export default function TradeHistoryModal({ coin }: TradeHistoryModalProps) {
                             </td>
 
                             {/* Timestamp */}
-                            <td className="px-4 py-3 text-slate-500 font-sans" title={new Date(trade.timestamp).toLocaleString('id-ID')}>
+                            <td className="px-4 py-3 text-slate-500 font-sans" title={new Date(trade.timestamp).toLocaleString('en-US')}>
                               {formatRelativeTime(trade.timestamp)}
                             </td>
 
@@ -456,12 +456,12 @@ export default function TradeHistoryModal({ coin }: TradeHistoryModalProps) {
 
             {/* Modal Footer */}
             <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between text-xs text-slate-500">
-              <span>Data bersumber dari GeckoTerminal DEX Real-time API</span>
+              <span>Data powered by GeckoTerminal Real-time DEX API</span>
               <button 
                 onClick={() => setIsOpen(false)} 
                 className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-semibold transition-colors"
               >
-                Tutup
+                Close
               </button>
             </div>
 
