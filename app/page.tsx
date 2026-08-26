@@ -7,7 +7,7 @@ import {
   Loader2, Copy, Check, ExternalLink, Wallet, Trash2, ArrowUpDown, Filter, Search, AlertTriangle, Shield, Ban, RefreshCw, TrendingUp, TrendingDown, Activity, Users, Clock, Timer, History, Pencil
 } from 'lucide-react';
 import TradeHistoryModal from './components/TradeHistoryModal';
-import { truncateAddress } from '@/app/lib/utils';
+import { truncateAddress, formatCompactUSD, formatCompactNumber } from '@/app/lib/utils';
 
 interface WalletItem {
   id?: number;
@@ -1958,10 +1958,10 @@ export default function Dashboard() {
                             <div className="min-w-0 overflow-hidden sm:px-3">
                               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">24h Vol / Liq</p>
                               <p className="text-xs font-bold text-slate-800 mt-1 truncate">
-                                Vol: {coin.volume_h24 ? `$${(coin.volume_h24 / 1000).toFixed(1)}K` : '-'}
+                                Vol: {coin.volume_h24 ? formatCompactUSD(coin.volume_h24) : '-'}
                               </p>
                               <p className="text-[10px] sm:text-[11px] font-semibold text-slate-600 mt-0.5 truncate">
-                                Liq: {coin.liquidity_usd ? `$${(coin.liquidity_usd / 1000).toFixed(1)}K` : '-'}
+                                Liq: {coin.liquidity_usd ? formatCompactUSD(coin.liquidity_usd) : '-'}
                               </p>
                             </div>
 
@@ -1969,10 +1969,10 @@ export default function Dashboard() {
                             <div className="min-w-0 overflow-hidden sm:px-3">
                               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">Market Cap</p>
                               <p className="text-xs font-bold text-slate-800 mt-1 truncate">
-                                {coin.market_cap ? (coin.market_cap >= 1_000_000 ? `$${(coin.market_cap / 1_000_000).toFixed(2)}M` : `$${(coin.market_cap / 1_000).toFixed(1)}K`) : '-'}
+                                {coin.market_cap ? formatCompactUSD(coin.market_cap) : '-'}
                               </p>
                               <p className="text-[10px] sm:text-[11px] font-semibold text-emerald-700 mt-0.5 truncate">
-                                {coin.total_holders ? `${coin.total_holders.toLocaleString()} holders` : 'Market Cap'}
+                                {coin.total_holders ? `${Math.ceil(coin.total_holders).toLocaleString()} holders` : 'Market Cap'}
                               </p>
                             </div>
 

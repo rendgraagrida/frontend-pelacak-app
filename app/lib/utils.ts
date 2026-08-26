@@ -27,6 +27,85 @@ export function formatTokenPrice(val: number | undefined | null): string {
 }
 
 /**
+ * Formats a number or numeric string (e.g. 2942300 or "2942.3K") into compact format with K, M, B, T.
+ * Translates overflow units (e.g. 2942.3K -> 2.9M) and supports ceiling/rounding.
+ */
+export function formatCompactNumber(
+  val: number | string | undefined | null,
+  options?: {
+    decimals?: number;
+    prefix?: string;
+    roundCeil?: boolean;
+  }
+): string {
+  if (val === undefined || val === null || val === '') return '-';
+
+  let num = 0;
+  if (typeof val === 'string') {
+    const clean = val.trim().toUpperCase();
+    if (clean === '-' || clean === 'N/A' || clean === '—') return '-';
+    
+    // Parse strings with potential suffix or currency symbol (e.g. "$2942.3K", "2942.3K", "1.5M")
+    const stripped = clean.replace(/[^0-9.-KMBT]/g, '');
+    if (stripped.endsWith('T')) {
+      num = parseFloat(stripped.slice(0, -1)) * 1e12;
+    } else if (stripped.endsWith('B')) {
+      num = parseFloat(stripped.slice(0, -1)) * 1e9;
+    } else if (stripped.endsWith('M')) {
+      num = parseFloat(stripped.slice(0, -1)) * 1e6;
+    } else if (stripped.endsWith('K')) {
+      num = parseFloat(stripped.slice(0, -1)) * 1e3;
+    } else {
+      num = parseFloat(stripped);
+    }
+  } else {
+    num = Number(val);
+  }
+
+  if (isNaN(num) || num <= 0) return options?.prefix ? `${options.prefix}0` : '0';
+
+  const prefix = options?.prefix || '';
+  const decimals = options?.decimals ?? 1;
+
+  if (num >= 1e12) {
+    const formatted = (num / 1e12).toFixed(decimals).replace(/\.0+$/, '');
+    return `${prefix}${formatted}T`;
+  }
+  if (num >= 1e9) {
+    const formatted = (num / 1e9).toFixed(decimals).replace(/\.0+$/, '');
+    return `${prefix}${formatted}B`;
+  }
+  if (num >= 1e6) {
+    const formatted = (num / 1e6).toFixed(decimals).replace(/\.0+$/, '');
+    return `${prefix}${formatted}M`;
+  }
+  if (num >= 1e3) {
+    const formatted = (num / 1e3).toFixed(decimals).replace(/\.0+$/, '');
+    return `${prefix}${formatted}K`;
+  }
+
+  if (options?.roundCeil) {
+    return `${prefix}${Math.ceil(num).toLocaleString('en-US')}`;
+  }
+
+  if (num >= 1) {
+    const formatted = Math.ceil(num).toLocaleString('en-US');
+    return `${prefix}${formatted}`;
+  }
+
+  return `${prefix}${num.toFixed(2)}`;
+}
+
+/**
+ * Formats a currency value compactly with USD prefix ($2.9M, $500K, $45)
+ */
+export function formatCompactUSD(val: number | string | undefined | null): string {
+  if (val === undefined || val === null || val === '') return '-';
+  const res = formatCompactNumber(val, { prefix: '$', decimals: 1 });
+  return res === '$0' ? '-' : res;
+}
+
+/**
  * Formats seconds into human readable countdown format (e.g. 5m 30s, 1h 15m)
  */
 export function formatCountdown(seconds: number): string {

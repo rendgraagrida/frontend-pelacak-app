@@ -6,9 +6,34 @@ import {
   formatCountdown,
   truncateAddress,
   getExplorerUrl,
+  formatCompactNumber,
+  formatCompactUSD
 } from '../app/lib/utils.ts';
 
 describe('Formatters & UI Utility Helpers', () => {
+  describe('formatCompactNumber & formatCompactUSD', () => {
+    test('should translate overflow values like 2942.3K into 2.9M', () => {
+      assert.equal(formatCompactNumber('2942.3K'), '2.9M');
+      assert.equal(formatCompactUSD('2942.3K'), '$2.9M');
+      assert.equal(formatCompactUSD(2942300), '$2.9M');
+    });
+
+    test('should format numbers with K, M, B, T properly', () => {
+      assert.equal(formatCompactNumber(1500), '1.5K');
+      assert.equal(formatCompactUSD(1500), '$1.5K');
+      assert.equal(formatCompactUSD(1500000), '$1.5M');
+      assert.equal(formatCompactUSD(2500000000), '$2.5B');
+      assert.equal(formatCompactUSD(1000000000000), '$1T');
+    });
+
+    test('should round integers cleanly or ceil when required', () => {
+      assert.equal(formatCompactNumber(45.2, { roundCeil: true }), '46');
+      assert.equal(formatCompactUSD(45.2), '$46');
+      assert.equal(formatCompactUSD(0), '-');
+      assert.equal(formatCompactUSD(null), '-');
+    });
+  });
+
   describe('formatCurrency', () => {
     test('should format positive numbers to standard USD format', () => {
       assert.equal(formatCurrency(1234.56), '$1,234.56');

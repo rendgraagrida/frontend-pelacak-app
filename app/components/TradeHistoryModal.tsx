@@ -17,7 +17,7 @@ import {
   Scale, 
   Activity 
 } from 'lucide-react';
-import { formatCurrency, formatTokenPrice, truncateAddress } from '@/app/lib/utils';
+import { formatCurrency, formatTokenPrice, truncateAddress, formatCompactNumber } from '@/app/lib/utils';
 
 interface Trade {
   id: string;
@@ -391,11 +391,7 @@ export default function TradeHistoryModal({ coin }: TradeHistoryModalProps) {
 
                             {/* Token Amount */}
                             <td className="px-4 py-3 text-slate-700">
-                              {trade.tokenAmount >= 1_000_000 
-                                ? `${(trade.tokenAmount / 1_000_000).toFixed(2)}M`
-                                : trade.tokenAmount >= 1_000 
-                                ? `${(trade.tokenAmount / 1_000).toFixed(2)}K`
-                                : trade.tokenAmount.toLocaleString('en-US', { maximumFractionDigits: 4 })}
+                              {formatCompactNumber(trade.tokenAmount, { decimals: 2, roundCeil: true })}
                             </td>
 
                             {/* Volume USD */}
