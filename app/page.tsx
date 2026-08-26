@@ -86,7 +86,9 @@ export default function Dashboard() {
   const [wallets, setWallets] = useState<WalletItem[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [walletPage, setWalletPage] = useState(1);
+  const WALLET_PAGE_SIZE = 10;
+
   const [newWallet, setNewWallet] = useState('');
   const [newLabel, setNewLabel] = useState('');
   const [newNetwork, setNewNetwork] = useState('EVM (ETH/BSC/RH)');
@@ -95,6 +97,10 @@ export default function Dashboard() {
   const [networkFilter, setNetworkFilter] = useState('All');
   const [walletFilter, setWalletFilter] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'net_worth', direction: 'desc' });
+
+  useEffect(() => {
+    setWalletPage(1);
+  }, [walletFilter, networkFilter]);
 
   const [expandedWallet, setExpandedWallet] = useState<string | null>(null);
   const [walletTokens, setWalletTokens] = useState<Record<string, TokenItem[]>>({});
@@ -441,7 +447,6 @@ export default function Dashboard() {
         return;
       }
 
-      setIsModalOpen(false);
       setNewWallet('');
       setNewLabel('');
       fetchWatchlist(); 
@@ -609,50 +614,75 @@ export default function Dashboard() {
 
 
   const connectEVMWallet = async () => {
-    if (typeof window === 'undefined' || !(window as any).ethereum) {
-      alert("Please install MetaMask or another EVM wallet extension in your browser.");
+    if (typeof window === 'undefined') return;
+
+    let provider = (window as any).ethereum;
+
+    // Support multi-injected EVM providers (EIP-6963 / MetaMask / Coinbase / Brave)
+    if (provider?.providers?.length) {
+      const pureMetaMask = provider.providers.find((p: any) => p.isMetaMask && !p.isPhantom);
+      if (pureMetaMask) {
+        provider = pureMetaMask;
+      } else {
+        provider = provider.providers.find((p: any) => !p.isPhantom) || provider.providers[0];
+      }
+    }
+
+    if (!provider) {
+      alert("No EVM wallet found. Please install MetaMask or another EVM wallet extension in your browser.");
       return;
     }
+
     try {
       setIsConnectingWallet(true);
       setShowConnectMenu(false);
-      const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
+      const accounts = await provider.request({ method: 'eth_requestAccounts' });
       if (accounts && accounts.length > 0) {
         const account = accounts[0];
         setConnectedWallet(account);
         setConnectedNetwork('Omnichain');
         localStorage.setItem('my_connected_wallet', account);
         localStorage.setItem('my_connected_network', 'Omnichain');
-        alert(`Successfully connected to MetaMask! Open the My Portfolio tab to view your assets.`);
         setActiveTab('my_wallet');
       }
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      console.error('EVM Connection error:', error);
+      if (error?.message?.includes('Solana') || error?.message?.includes('support') || provider?.isPhantom) {
+        alert("Your Phantom wallet is currently set to a Solana-only account. To connect with Phantom as an EVM wallet, please switch to a multi-chain/Ethereum account inside Phantom, or choose 'Solana Wallet' from the Connect menu.");
+      } else if (error?.code !== 4001) {
+        alert(error?.message || "Failed to connect EVM wallet.");
+      }
     } finally {
       setIsConnectingWallet(false);
     }
   };
 
   const connectSolanaWallet = async () => {
-    if (typeof window === 'undefined' || !(window as any).solana) {
+    if (typeof window === 'undefined') return;
+
+    const solanaProvider = (window as any).phantom?.solana || (window as any).solana;
+
+    if (!solanaProvider) {
       alert("Please install Phantom or another Solana wallet extension in your browser.");
       return;
     }
     try {
       setIsConnectingWallet(true);
       setShowConnectMenu(false);
-      const resp = await (window as any).solana.connect();
+      const resp = await solanaProvider.connect();
       if (resp && resp.publicKey) {
         const account = resp.publicKey.toString();
         setConnectedWallet(account);
         setConnectedNetwork('Solana');
         localStorage.setItem('my_connected_wallet', account);
         localStorage.setItem('my_connected_network', 'Solana');
-        alert(`Successfully connected to Phantom! Open the My Portfolio tab to view your assets.`);
         setActiveTab('my_wallet');
       }
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      console.error('Solana Connection error:', error);
+      if (error?.code !== 4001) {
+        alert(error?.message || "Failed to connect Solana wallet.");
+      }
     } finally {
       setIsConnectingWallet(false);
     }
@@ -892,6 +922,9 @@ export default function Dashboard() {
     return 0;
   });
 
+  const totalWalletPages = Math.ceil(sortedWallets.length / WALLET_PAGE_SIZE) || 1;
+  const paginatedWallets = sortedWallets.slice((walletPage - 1) * WALLET_PAGE_SIZE, walletPage * WALLET_PAGE_SIZE);
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
       
@@ -1009,7 +1042,7 @@ export default function Dashboard() {
         
         {/* TAB 1: WALLET TRACKER */}
         {activeTab === 'watchlist' && (
-          <div className="space-y-4">
+          <div className="space-y-6">
             
             {/* Subheader & Global Action Bar */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -1080,13 +1113,6 @@ export default function Dashboard() {
                   <Trash2 size={13} />
                   <span>Delete All</span>
                 </button>
-
-                <button 
-                  onClick={() => setIsModalOpen(true)} 
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-colors text-xs font-bold shadow-xs"
-                >
-                  <Plus size={14} /> Add Target
-                </button>
               </div>
             </div>
 
@@ -1142,267 +1168,363 @@ export default function Dashboard() {
               </form>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            {/* Horizontal Target Wallets Cards List */}
+            <div className="w-full">
               {loading ? (
-                <div className="p-10 flex flex-col items-center justify-center text-slate-500">
-                  <Loader2 className="animate-spin mb-2" size={24} />
-                  <p className="text-sm font-medium">Loading database records...</p>
+                <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl shadow-xs border border-slate-200">
+                  <Loader2 size={32} className="animate-spin text-blue-600 mb-4" />
+                  <p className="text-slate-500 font-medium text-sm">Loading target wallet database records...</p>
+                </div>
+              ) : sortedWallets.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl shadow-xs border border-slate-200 border-dashed">
+                  <div className="bg-blue-50 p-4 rounded-full mb-4"><LayoutGrid size={32} className="text-blue-500" /></div>
+                  <h3 className="text-lg font-bold text-slate-800">No target wallets found</h3>
+                  <p className="text-slate-500 text-xs mt-1 max-w-md text-center">Add a target wallet address above to start tracking holdings and portfolio movements.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm whitespace-nowrap">
-                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                      <tr>
-                        <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition-colors group" onClick={() => handleSort('wallet_address')}>
-                          <div className="flex items-center gap-1.5">Target Wallet <ArrowUpDown size={14} className={sortConfig.key === 'wallet_address' ? 'text-blue-600' : 'text-slate-300'} /></div>
-                        </th>
-                        <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition-colors group" onClick={() => handleSort('chain_network')}>
-                          <div className="flex items-center gap-1.5">Network <ArrowUpDown size={14} className={sortConfig.key === 'chain_network' ? 'text-blue-600' : 'text-slate-300'} /></div>
-                        </th>
-                        <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition-colors group text-right" onClick={() => handleSort('net_worth')}>
-                          <div className="flex items-center justify-end gap-1.5">Valid Net Worth <ArrowUpDown size={14} className={sortConfig.key === 'net_worth' ? 'text-blue-600' : 'text-slate-300'} /></div>
-                        </th>
-                        <th className="px-6 py-4 text-center">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {sortedWallets.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
-                            <LayoutGrid size={32} className="mx-auto text-slate-300 mb-2" />
-                            <p className="font-semibold text-slate-700">No target wallets found</p>
-                            <p className="text-xs text-slate-400 mt-0.5">Add a target wallet address above to start tracking holdings.</p>
-                          </td>
-                        </tr>
-                      ) : (
-                        sortedWallets.map((wallet, index) => {
-                          const memoryKey = `${wallet.wallet_address}-${wallet.chain_network}`;
-                          const isExpanded = expandedWallet === memoryKey;
-                          const isSupported = ['ETHEREUM', 'BASE CHAIN', 'BSC', 'ROBINHOOD', 'SOLANA'].includes(wallet.chain_network.toUpperCase()) || wallet.chain_network.toUpperCase().includes('EVM') || wallet.chain_network.toUpperCase().includes('RH');
-                          const isLoadingToken = loadingTokens[memoryKey];
-                          const tokens = walletTokens[memoryKey] || [];
-                          const validTokens = tokens.filter(t => !t.is_spam);
-                          const spamTokens = tokens.filter(t => t.is_spam);
-                          const netWorth = getNetWorth(wallet.wallet_address, wallet.chain_network);
+                <div className="space-y-3">
+                  {paginatedWallets.map((wallet, index) => {
+                    const memoryKey = `${wallet.wallet_address}-${wallet.chain_network}`;
+                    const isExpanded = expandedWallet === memoryKey;
+                    const isSupported = ['ETHEREUM', 'BASE CHAIN', 'BSC', 'ROBINHOOD', 'SOLANA'].includes(wallet.chain_network.toUpperCase()) || wallet.chain_network.toUpperCase().includes('EVM') || wallet.chain_network.toUpperCase().includes('RH');
+                    const isLoadingToken = loadingTokens[memoryKey];
+                    const tokens = walletTokens[memoryKey] || [];
+                    const validTokens = tokens.filter(t => !t.is_spam);
+                    const spamTokens = tokens.filter(t => t.is_spam);
+                    const netWorth = getNetWorth(wallet.wallet_address, wallet.chain_network);
 
-                          return (
-                            <Fragment key={`${memoryKey}-${index}`}>
-                              <tr className={`transition-colors ${isExpanded ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}>
-                                <td className="px-6 py-4">
-                                  <div className="flex flex-col">
-                                    <span className="font-bold text-slate-900">{wallet.label || 'Unknown Target'}</span>
-                                    <div className="flex items-center gap-2 mt-1">
-                                      <span className="font-mono text-slate-500 text-xs">{wallet.wallet_address}</span>
-                                      <button onClick={() => handleCopy(wallet.wallet_address)} className="text-slate-400 hover:text-blue-600"><Copy size={12} /></button>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="px-6 py-4">
-                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200">{wallet.chain_network}</span>
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                  {isLoadingToken && netWorth === null ? (
-                                    <div className="flex items-center justify-end gap-2 text-slate-400 text-xs italic"><Loader2 size={12} className="animate-spin" /> Syncing...</div>
-                                  ) : netWorth !== null ? (
-                                    <span className="font-bold text-blue-600 text-base">{formatCurrency(netWorth)}</span>
-                                  ) : (
-                                    <span className="text-xs text-slate-400 italic">Unscanned</span>
-                                  )}
-                                </td>
-                                <td className="px-6 py-4 text-center">
-                                  <div className="flex items-center justify-center gap-2">
-                                    {isSupported ? (
-                                      <button onClick={() => handleToggleTokens(wallet.wallet_address, wallet.chain_network)} className={`inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${isExpanded ? 'bg-blue-100 text-blue-700' : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'}`}>Inspect {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</button>
-                                    ) : (
-                                      <span className="text-xs text-slate-400 font-medium px-3">Unsupported</span>
-                                    )}
-                                    <button onClick={() => handleDeleteWallet(wallet.wallet_address, wallet.chain_network)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md"><Trash2 size={16} /></button>
-                                  </div>
-                                </td>
-                              </tr>
+                    return (
+                      <div 
+                        key={`${memoryKey}-${index}`} 
+                        className="bg-white rounded-xl shadow-xs border border-slate-200/90 hover:border-slate-300 hover:shadow-md transition-all p-4.5 overflow-hidden"
+                      >
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                          
+                          {/* 1. Wallet Identity */}
+                          <div className="flex items-center gap-3.5 min-w-[260px] lg:max-w-[320px]">
+                            <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-base shadow-xs shrink-0 border border-blue-200/60">
+                              <Wallet size={18} />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <h3 className="font-bold text-slate-900 text-base leading-tight truncate" title={wallet.label || wallet.wallet_address}>
+                                  {wallet.label || 'Unknown Target'}
+                                </h3>
+                              </div>
+                              <div className="flex items-center flex-wrap gap-1.5 mt-1">
+                                <span className="text-[10px] font-bold tracking-wider uppercase bg-blue-50 text-blue-700 border border-blue-200/60 px-1.5 py-0.5 rounded">
+                                  {wallet.chain_network}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-1 text-[11px] font-mono text-slate-400">
+                                <span>{truncateAddress(wallet.wallet_address, 8, 6)}</span>
+                                <button 
+                                  onClick={() => handleCopy(wallet.wallet_address)} 
+                                  className="text-slate-400 hover:text-slate-700 transition-colors"
+                                  title="Copy wallet address"
+                                >
+                                  {copiedAddress === wallet.wallet_address ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
 
-                              {isExpanded && (
-                                <tr>
-                                  <td colSpan={4} className="p-0 border-b border-slate-200">
-                                    <div className="bg-slate-50 p-6 border-l-4 border-blue-500 shadow-inner">
-                                      <div className="flex justify-between items-start mb-6">
-                                        <div>
-                                          <h4 className="text-sm font-bold text-slate-800">Valid Assets</h4>
-                                          <p className="text-xs text-slate-500 font-mono mt-1">{wallet.wallet_address}</p>
+                          {/* 2. Metrics Grid (Valid Net Worth, Holdings, Spam Quarantine) */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50/70 p-3 rounded-xl border border-slate-100 flex-1">
+                            {/* Net Worth */}
+                            <div>
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Valid Net Worth</p>
+                              <div className="mt-0.5 flex items-baseline gap-1.5">
+                                {isLoadingToken && netWorth === null ? (
+                                  <span className="text-xs font-semibold text-blue-600 flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Syncing...</span>
+                                ) : netWorth !== null ? (
+                                  <span className="text-base font-bold text-blue-600">{formatCurrency(netWorth)}</span>
+                                ) : (
+                                  <span className="text-xs text-slate-400 italic">Unscanned</span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-0.5">Verified Holdings</p>
+                            </div>
+
+                            {/* Detected Assets */}
+                            <div>
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Holdings</p>
+                              <p className="text-xs font-bold text-slate-800 mt-1">
+                                {validTokens.length} active assets
+                              </p>
+                              <p className="text-[11px] text-slate-500 mt-0.5">On-chain Tokens</p>
+                            </div>
+
+                            {/* Spam Quarantine */}
+                            <div>
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Spam Quarantine</p>
+                              <p className="text-xs font-bold text-slate-800 mt-1">
+                                {spamTokens.length > 0 ? (
+                                  <span className="text-rose-600 font-bold">{spamTokens.length} blocked</span>
+                                ) : (
+                                  <span className="text-slate-600">0 spam</span>
+                                )}
+                              </p>
+                              <p className="text-[11px] text-slate-500 mt-0.5">Auto-isolated</p>
+                            </div>
+                          </div>
+
+                          {/* 3. Action Buttons */}
+                          <div className="flex items-center flex-wrap sm:flex-nowrap gap-2 self-start lg:self-center shrink-0">
+                            {isSupported ? (
+                              <button 
+                                onClick={() => handleToggleTokens(wallet.wallet_address, wallet.chain_network)}
+                                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs border ${
+                                  isExpanded 
+                                    ? 'bg-blue-600 text-white border-blue-600' 
+                                    : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200/60'
+                                }`}
+                              >
+                                <span>Inspect</span>
+                                {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                              </button>
+                            ) : (
+                              <span className="text-xs text-slate-400 font-medium px-3 py-1.5 bg-slate-100 rounded-lg">Unsupported</span>
+                            )}
+
+                            <a 
+                              href={getExplorerUrl(wallet.chain_network, 'NATIVE_COIN', wallet.wallet_address)} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-slate-200 shadow-2xs"
+                              title="View on Explorer"
+                            >
+                              <span>Explorer</span>
+                              <ExternalLink size={12} />
+                            </a>
+
+                            <button 
+                              onClick={() => handleDeleteWallet(wallet.wallet_address, wallet.chain_network)} 
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100 ml-1"
+                              title="Delete Target Wallet"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+
+                        </div>
+
+                        {/* EXPANDED ASSET DRAWER */}
+                        {isExpanded && (
+                          <div className="mt-4 pt-4 border-t border-slate-200/80">
+                            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 shadow-inner">
+                              <div className="flex justify-between items-start mb-4">
+                                <div>
+                                  <h4 className="text-sm font-bold text-slate-900">Valid Assets Breakdown</h4>
+                                  <p className="text-xs text-slate-500 font-mono mt-0.5">{wallet.wallet_address}</p>
+                                </div>
+                              </div>
+
+                              {/* GRID VALID TOKENS */}
+                              {validTokens.length === 0 ? (
+                                <div className="p-6 text-center text-slate-400 text-xs italic bg-white rounded-lg border border-slate-200">
+                                  No active non-spam tokens found in this wallet.
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                                  {validTokens.map((token, tIdx) => (
+                                    <div key={`valid-${tIdx}`} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs hover:border-blue-300 transition-all flex flex-col justify-between">
+                                      <div>
+                                        <div className="flex justify-between items-start mb-2.5">
+                                          <div>
+                                            <h5 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                                              <a
+                                                href={getDexScreenerUrl(wallet.chain_network, token.contract_address)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="hover:text-blue-600 hover:underline flex items-center gap-1 group cursor-pointer"
+                                                title="Open live chart on DexScreener"
+                                                onClick={(e) => e.stopPropagation()}
+                                              >
+                                                <span>{token.symbol}</span>
+                                                <ExternalLink size={11} className="text-slate-400 group-hover:text-blue-600" />
+                                              </a>
+                                              {token.contract_address === 'NATIVE_COIN' && <span className="bg-blue-100 text-blue-700 text-[9px] px-1 py-0.5 rounded font-bold">CORE</span>}
+                                            </h5>
+                                            <div className="flex items-center gap-1.5 mt-1">
+                                              {token.contract_address !== 'NATIVE_COIN' && (
+                                                <button onClick={() => handleCopy(token.contract_address)} className="text-[10px] font-mono text-slate-500 hover:text-blue-600 bg-slate-50 px-1 py-0.5 rounded border border-slate-100 flex items-center gap-1" title="Copy Contract Address">
+                                                  {token.contract_address.slice(0, 6)}...{token.contract_address.slice(-4)}
+                                                </button>
+                                              )}
+                                              <a
+                                                href={getDexScreenerUrl(wallet.chain_network, token.contract_address)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="text-[9px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1 transition-colors"
+                                                title="View Chart on DexScreener"
+                                              >
+                                                DexScreener
+                                              </a>
+                                            </div>
+                                          </div>
+                                          <div className="text-right">
+                                            <p className="text-xs font-bold text-slate-900">{formatCurrency(token.total_value_usd)}</p>
+                                          </div>
+                                        </div>
+                                        <div className="flex justify-between items-center text-[11px] text-slate-500 border-t border-slate-100 pt-2.5">
+                                          <span className="font-medium">Qty: {token.balance}</span>
+                                          <span>{formatTokenPrice(token.price_usd)}</span>
                                         </div>
                                       </div>
 
-                                      {/* GRID VALID TOKENS */}
-                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {validTokens.map((token, tIdx) => (
-                                          <div key={`valid-${tIdx}`} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-all flex flex-col justify-between">
-                                            <div>
-                                              <div className="flex justify-between items-start mb-3">
-                                                <div>
-                                                  <h5 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                                                    <a
-                                                      href={getDexScreenerUrl(wallet.chain_network, token.contract_address)}
-                                                      target="_blank"
-                                                      rel="noopener noreferrer"
-                                                      className="hover:text-blue-600 hover:underline flex items-center gap-1.5 group cursor-pointer"
-                                                      title="Open live chart on DexScreener"
-                                                      onClick={(e) => e.stopPropagation()}
-                                                    >
-                                                      <span>{token.symbol}</span>
-                                                      <ExternalLink size={13} className="text-slate-400 group-hover:text-blue-600" />
-                                                    </a>
-                                                    {token.contract_address === 'NATIVE_COIN' && <span className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0.5 rounded font-bold">CORE</span>}
-                                                  </h5>
-                                                  <div className="flex items-center gap-2 mt-1.5">
-                                                    {token.contract_address !== 'NATIVE_COIN' && (
-                                                      <button onClick={() => handleCopy(token.contract_address)} className="text-[11px] font-mono text-slate-500 hover:text-blue-600 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 flex items-center gap-1" title="Copy Contract Address">
-                                                        {token.contract_address.slice(0, 6)}...{token.contract_address.slice(-4)}
-                                                      </button>
-                                                    )}
-                                                    <a
-                                                      href={getDexScreenerUrl(wallet.chain_network, token.contract_address)}
-                                                      target="_blank"
-                                                      rel="noopener noreferrer"
-                                                      onClick={(e) => e.stopPropagation()}
-                                                      className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1 transition-colors"
-                                                      title="View Chart on DexScreener"
-                                                    >
-                                                      DexScreener
-                                                    </a>
-                                                    <button 
-                                                      onClick={(e) => { e.stopPropagation(); window.open(getExplorerUrl(wallet.chain_network, token.contract_address, wallet.wallet_address), '_blank'); }} 
-                                                      className="text-slate-400 hover:text-blue-600" 
-                                                      title="View on Explorer"
-                                                    >
-                                                      <ExternalLink size={12} />
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                                <div className="text-right">
-                                                  <p className="text-sm font-bold text-slate-900">{formatCurrency(token.total_value_usd)}</p>
-                                                </div>
-                                              </div>
-                                              <div className="flex justify-between items-center text-xs text-slate-500 border-t border-slate-100 pt-3">
-                                                <span className="font-medium">Qty: {token.balance}</span>
-                                                <span>{formatTokenPrice(token.price_usd)}</span>
-                                              </div>
-                                            </div>
-
-                                            {/* QUICK ACTIONS FOR TOKEN */}
-                                            {token.contract_address !== 'NATIVE_COIN' && (
-                                              <div className="flex items-center gap-2 pt-3 mt-3 border-t border-slate-100">
-                                                <button 
-                                                  onClick={(e) => { e.stopPropagation(); handleViewHistory(wallet.wallet_address, token.contract_address, wallet.chain_network, token.symbol || token.name || '?', token.price_usd || 0); }}
-                                                  className="flex-1 py-1.5 px-2 rounded-lg bg-violet-50 hover:bg-violet-100 text-violet-700 font-semibold text-xs flex items-center justify-center gap-1 transition-colors border border-violet-200/60"
-                                                  title="View transaction history for this token"
-                                                >
-                                                  <History size={13} /> History
-                                                </button>
-                                                <button 
-                                                  onClick={() => handleQuickTrack(token.contract_address, token.name || token.symbol, wallet.chain_network)}
-                                                  className="flex-1 py-1.5 px-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs flex items-center justify-center gap-1 transition-colors border border-emerald-200/60"
-                                                  title="Add to Coin Tracker"
-                                                >
-                                                  <Activity size={13} /> + Track
-                                                </button>
-                                                <button 
-                                                  onClick={() => handleQuickBlacklist(token.contract_address, token.name || token.symbol, wallet.chain_network)}
-                                                  className="flex-1 py-1.5 px-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-xs flex items-center justify-center gap-1 transition-colors border border-red-200/60"
-                                                  title="Add to Blacklist"
-                                                >
-                                                  <Ban size={13} /> + Blacklist
-                                                </button>
-                                              </div>
-                                            )}
-                                          </div>
-                                        ))}
-                                      </div>
-
-                                      {/* SPAM QUARANTINE FOLDER */}
-                                      {spamTokens.length > 0 && (
-                                        <div className="mt-8 border border-red-200 rounded-xl bg-red-50/30 overflow-hidden">
+                                      {/* QUICK ACTIONS FOR TOKEN */}
+                                      {token.contract_address !== 'NATIVE_COIN' && (
+                                        <div className="flex items-center gap-1.5 pt-2.5 mt-2.5 border-t border-slate-100 text-xs">
                                           <button 
-                                            onClick={() => setShowSpam(prev => ({ ...prev, [memoryKey]: !prev[memoryKey] }))}
-                                            className="w-full px-4 py-3 flex justify-between items-center bg-red-50 hover:bg-red-100 transition-colors"
+                                            onClick={(e) => { e.stopPropagation(); handleViewHistory(wallet.wallet_address, token.contract_address, wallet.chain_network, token.symbol || token.name || '?', token.price_usd || 0); }}
+                                            className="flex-1 py-1 px-1.5 rounded-lg bg-violet-50 hover:bg-violet-100 text-violet-700 font-semibold text-[11px] flex items-center justify-center gap-1 transition-colors border border-violet-200/60"
+                                            title="View transaction history for this token"
                                           >
-                                            <div className="flex items-center gap-2 text-red-700 font-bold text-sm">
-                                              <AlertTriangle size={16} /> Blocked Spam Assets ({spamTokens.length})
-                                            </div>
-                                            {showSpam[memoryKey] ? <ChevronUp size={16} className="text-red-500"/> : <ChevronDown size={16} className="text-red-500"/>}
+                                            <History size={11} /> History
                                           </button>
-                                          
-                                          {showSpam[memoryKey] && (
-                                            <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 border-t border-red-100">
-                                              {spamTokens.map((token, tIdx) => (
-                                                <div key={`spam-${tIdx}`} className="bg-white p-3 rounded-lg border border-red-100 opacity-90 hover:opacity-100 transition-opacity flex flex-col justify-between">
-                                                  <div>
-                                                    <div className="flex justify-between items-start mb-2">
-                                                      <div>
-                                                        <h5 className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                                                          <a
-                                                            href={getDexScreenerUrl(wallet.chain_network, token.contract_address)}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="hover:text-blue-600 hover:underline flex items-center gap-1"
-                                                            title="Inspect chart on DexScreener"
-                                                            onClick={(e) => e.stopPropagation()}
-                                                          >
-                                                            <span>{token.symbol}</span>
-                                                            <ExternalLink size={10} className="text-slate-400" />
-                                                          </a>
-                                                        </h5>
-                                                        <span className="text-[10px] font-mono text-slate-400 mt-1 block">{token.contract_address.slice(0, 6)}...{token.contract_address.slice(-4)}</span>
-                                                      </div>
-                                                      <div className="text-right">
-                                                        <span className="bg-red-100 text-red-700 text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider line-through">
-                                                          Fake: {formatCurrency(token.total_value_usd)}
-                                                        </span>
-                                                      </div>
-                                                    </div>
-                                                  </div>
-                                                  {token.contract_address !== 'NATIVE_COIN' && (
-                                                    <div className="flex items-center gap-2 pt-2 border-t border-red-50 text-xs mt-2">
-                                                      <button 
-                                                        onClick={() => handleQuickTrack(token.contract_address, token.name || token.symbol, wallet.chain_network)}
-                                                        className="flex-1 py-1 px-2 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium text-[10px] flex items-center justify-center gap-1 transition-colors border border-emerald-100"
-                                                        title="Unblock & Add to Coin Tracker"
-                                                      >
-                                                        <Activity size={11} /> + Track
-                                                      </button>
-                                                      <button 
-                                                        onClick={() => handleQuickBlacklist(token.contract_address, token.name || token.symbol, wallet.chain_network)}
-                                                        className="flex-1 py-1 px-2 rounded-md bg-red-50 hover:bg-red-100 text-red-700 font-medium text-[10px] flex items-center justify-center gap-1 transition-colors border border-red-100"
-                                                        title="Confirm Blacklist"
-                                                      >
-                                                        <Ban size={11} /> + Blacklist
-                                                      </button>
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              ))}
+                                          <button 
+                                            onClick={() => handleQuickTrack(token.contract_address, token.name || token.symbol, wallet.chain_network)}
+                                            className="flex-1 py-1 px-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-[11px] flex items-center justify-center gap-1 transition-colors border border-emerald-200/60"
+                                            title="Add to Coin Tracker"
+                                          >
+                                            <Activity size={11} /> + Track
+                                          </button>
+                                          <button 
+                                            onClick={() => handleQuickBlacklist(token.contract_address, token.name || token.symbol, wallet.chain_network)}
+                                            className="flex-1 py-1 px-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-[11px] flex items-center justify-center gap-1 transition-colors border border-rose-200/60"
+                                            title="Add to Blacklist"
+                                          >
+                                            <Ban size={11} /> + Blacklist
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* SPAM QUARANTINE ACCORDION */}
+                              {spamTokens.length > 0 && (
+                                <div className="mt-5 border border-rose-200 rounded-xl bg-rose-50/30 overflow-hidden">
+                                  <button 
+                                    onClick={() => setShowSpam(prev => ({ ...prev, [memoryKey]: !prev[memoryKey] }))}
+                                    className="w-full px-4 py-2.5 flex justify-between items-center bg-rose-50 hover:bg-rose-100 transition-colors"
+                                  >
+                                    <div className="flex items-center gap-2 text-rose-700 font-bold text-xs">
+                                      <AlertTriangle size={14} /> Blocked Spam Assets ({spamTokens.length})
+                                    </div>
+                                    {showSpam[memoryKey] ? <ChevronUp size={14} className="text-rose-500"/> : <ChevronDown size={14} className="text-rose-500"/>}
+                                  </button>
+                                  
+                                  {showSpam[memoryKey] && (
+                                    <div className="p-3.5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 border-t border-rose-100">
+                                      {spamTokens.map((token, tIdx) => (
+                                        <div key={`spam-${tIdx}`} className="bg-white p-2.5 rounded-lg border border-rose-100 opacity-90 hover:opacity-100 transition-opacity flex flex-col justify-between">
+                                          <div>
+                                            <div className="flex justify-between items-start mb-1.5">
+                                              <div>
+                                                <h5 className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                                                  <a
+                                                    href={getDexScreenerUrl(wallet.chain_network, token.contract_address)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="hover:text-blue-600 hover:underline flex items-center gap-1"
+                                                    title="Inspect chart on DexScreener"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                  >
+                                                    <span>{token.symbol}</span>
+                                                    <ExternalLink size={9} className="text-slate-400" />
+                                                  </a>
+                                                </h5>
+                                                <span className="text-[9px] font-mono text-slate-400 mt-0.5 block">{token.contract_address.slice(0, 6)}...{token.contract_address.slice(-4)}</span>
+                                              </div>
+                                              <div className="text-right">
+                                                <span className="bg-rose-100 text-rose-700 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider line-through">
+                                                  Fake: {formatCurrency(token.total_value_usd)}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                          {token.contract_address !== 'NATIVE_COIN' && (
+                                            <div className="flex items-center gap-1.5 pt-1.5 border-t border-rose-50 text-[10px] mt-1.5">
+                                              <button 
+                                                onClick={() => handleQuickTrack(token.contract_address, token.name || token.symbol, wallet.chain_network)}
+                                                className="flex-1 py-1 px-1.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium flex items-center justify-center gap-1 transition-colors border border-emerald-100"
+                                                title="Unblock & Add to Coin Tracker"
+                                              >
+                                                <Activity size={10} /> + Track
+                                              </button>
+                                              <button 
+                                                onClick={() => handleQuickBlacklist(token.contract_address, token.name || token.symbol, wallet.chain_network)}
+                                                className="flex-1 py-1 px-1.5 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 font-medium flex items-center justify-center gap-1 transition-colors border border-rose-100"
+                                                title="Confirm Blacklist"
+                                              >
+                                                <Ban size={10} /> + Blacklist
+                                              </button>
                                             </div>
                                           )}
                                         </div>
-                                      )}
-
-                                      {/* LOAD MORE BUTTON */}
-                                      <div className="mt-6 flex justify-center">
-                                        {isLoadingToken ? (
-                                          <div className="flex items-center gap-2 text-sm text-blue-600 font-medium"><Loader2 size={16} className="animate-spin" /> Fetching more records...</div>
-                                        ) : walletHasNext[memoryKey] && (
-                                          <button onClick={() => handleLoadMore(wallet.wallet_address, wallet.chain_network)} className="text-sm font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 px-6 py-2 rounded-lg shadow-sm">Load More Assets</button>
-                                        )}
-                                      </div>
+                                      ))}
                                     </div>
-                                  </td>
-                                </tr>
+                                  )}
+                                </div>
                               )}
-                            </Fragment>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
+
+                              {/* LOAD MORE BUTTON */}
+                              <div className="mt-4 flex justify-center">
+                                {isLoadingToken ? (
+                                  <div className="flex items-center gap-2 text-xs text-blue-600 font-medium"><Loader2 size={14} className="animate-spin" /> Fetching more records...</div>
+                                ) : walletHasNext[memoryKey] && (
+                                  <button onClick={() => handleLoadMore(wallet.wallet_address, wallet.chain_network)} className="text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600 px-5 py-1.5 rounded-lg shadow-2xs">Load More Assets</button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* PAGINATION CONTROLS */}
+              {sortedWallets.length > WALLET_PAGE_SIZE && (
+                <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="text-xs text-slate-500 font-medium">
+                    Showing <span className="font-bold text-slate-800">{(walletPage - 1) * WALLET_PAGE_SIZE + 1}</span> - <span className="font-bold text-slate-800">{Math.min(walletPage * WALLET_PAGE_SIZE, sortedWallets.length)}</span> of <span className="font-bold text-slate-800">{sortedWallets.length}</span> target wallets
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setWalletPage(prev => Math.max(prev - 1, 1))}
+                      disabled={walletPage === 1}
+                      className="px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      Previous
+                    </button>
+                    {Array.from({ length: totalWalletPages }, (_, i) => i + 1).map((pg) => (
+                      <button
+                        key={pg}
+                        onClick={() => setWalletPage(pg)}
+                        className={`w-7 h-7 text-xs font-bold rounded-lg transition-all ${
+                          walletPage === pg
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'text-slate-700 hover:bg-slate-100 border border-transparent'
+                        }`}
+                      >
+                        {pg}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setWalletPage(prev => Math.min(prev + 1, totalWalletPages))}
+                      disabled={walletPage === totalWalletPages}
+                      className="px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -2246,65 +2368,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* MODAL ADD WATCHLIST TARGET */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
-            <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100 bg-slate-50/80">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Plus size={18} className="text-blue-600" /> Add Target Wallet
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg"><X size={18} /></button>
-            </div>
-            <form onSubmit={handleAddWallet} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Target Label (Name)</label>
-                <input 
-                  type="text" 
-                  value={newLabel} 
-                  onChange={(e) => setNewLabel(e.target.value)} 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 outline-none focus:border-blue-500 text-xs" 
-                  placeholder="e.g. Whale #1, Smart Money" 
-                  required 
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Wallet Address</label>
-                <input 
-                  type="text" 
-                  value={newWallet} 
-                  onChange={(e) => setNewWallet(e.target.value)} 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 outline-none focus:border-blue-500 text-xs font-mono" 
-                  placeholder="0x... or Solana Address" 
-                  required 
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Blockchain Network</label>
-                <select 
-                  value={newNetwork} 
-                  onChange={(e) => setNewNetwork(e.target.value)} 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 outline-none focus:border-blue-500 text-xs font-semibold"
-                >
-                  <option value="EVM (ETH/BSC/RH)">EVM Omnichain (All)</option>
-                  <option value="Ethereum">Ethereum Mainnet</option>
-                  <option value="BSC">BNB Smart Chain</option>
-                  <option value="Base Chain">Base Network</option>
-                  <option value="Robinhood">Robinhood</option>
-                  <option value="Solana">Solana</option>
-                </select>
-              </div>
-              <button 
-                type="submit" 
-                disabled={isSubmitting} 
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl disabled:opacity-50 text-xs shadow-xs flex justify-center items-center gap-2 transition-colors mt-2"
-              >
-                {isSubmitting ? <><Loader2 size={15} className="animate-spin" /> Saving Target...</> : "Start Tracking Target"}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+
 
       {/* MODAL TOP HOLDERS */}
       {isHoldersModalOpen && (
