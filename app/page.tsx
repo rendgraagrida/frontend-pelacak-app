@@ -933,7 +933,7 @@ export default function Dashboard() {
           <div className="flex justify-between items-center h-16">
             
             {/* Brand Logo & Intelligence Tag */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               <div className="bg-gradient-to-tr from-blue-600 to-indigo-600 p-2 rounded-xl shadow-md shadow-blue-500/20 text-white flex items-center justify-center">
                 <Wallet className="text-white" size={20} />
               </div>
@@ -950,7 +950,7 @@ export default function Dashboard() {
             </div>
 
             {/* Navigation Tabs & Connect Button */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               <div className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/80">
                 <button 
                   onClick={() => handleTabChange('my_wallet')} 
@@ -2017,22 +2017,22 @@ export default function Dashboard() {
 
         {/* TAB 4: MY PORTFOLIO */}
         {activeTab === 'my_wallet' && (
-          <div className="space-y-5">
+          <div className="space-y-6">
             
             {/* Subheader */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
                 <div className="flex items-center gap-2.5">
                   <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                    <ShieldCheck size={22} className="text-emerald-600" />
-                    My Personal Portfolio
+                    <ShieldCheck size={20} className="text-emerald-600" />
+                    My Portfolio
                   </h2>
                   <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200/60">
-                    Private & On-chain
+                    {connectedWallet ? `${myWalletTokens.filter(t => !t.is_spam).length} assets` : 'Not Connected'}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Track personal asset balances directly on-chain without storing private keys or public records.
+                  Track real-time personal token balances and portfolio net worth directly on-chain.
                 </p>
               </div>
 
@@ -2049,7 +2049,7 @@ export default function Dashboard() {
 
                   <button 
                     onClick={disconnectWallet} 
-                    className="bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all text-xs font-bold shadow-2xs"
+                    className="bg-rose-50 border border-rose-200/80 hover:bg-rose-100 text-rose-700 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all text-xs font-bold shadow-2xs"
                   >
                     <X size={13} />
                     <span>Disconnect</span>
@@ -2059,11 +2059,11 @@ export default function Dashboard() {
             </div>
 
             {!connectedWallet ? (
-              <div className="bg-white rounded-2xl shadow-xs border border-slate-200 flex flex-col items-center justify-center py-20 px-4 text-center">
-                <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mb-4 border border-emerald-100 shadow-2xs">
-                  <Wallet size={32} className="text-emerald-600" />
+              <div className="bg-white rounded-xl shadow-xs border border-slate-200/90 flex flex-col items-center justify-center py-20 px-4 text-center">
+                <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mb-4 border border-emerald-100 shadow-2xs">
+                  <Wallet size={28} className="text-emerald-600" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-900">No Wallet Connected</h3>
+                <h3 className="text-lg font-bold text-slate-900">No Web3 Wallet Connected</h3>
                 <p className="text-xs text-slate-500 max-w-sm mt-1.5 mb-6">
                   Connect your Web3 wallet (MetaMask / Phantom / Solflare) to track your personal asset portfolio in real time.
                 </p>
@@ -2077,53 +2077,52 @@ export default function Dashboard() {
             ) : (
               <div className="space-y-4">
                 
-                {/* Net Worth Summary Card */}
-                <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 rounded-2xl p-6 text-white shadow-md border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div>
-                    <span className="text-[11px] uppercase font-extrabold text-slate-400 tracking-wider flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                      Total Verified Net Worth
-                    </span>
-                    <div className="text-3xl font-black text-white mt-1 tracking-tight">
-                      {formatCurrency(myWalletNetWorth)}
+                {/* Net Worth Summary Bar */}
+                <div className="bg-white rounded-xl shadow-xs border border-slate-200/90 p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-11 h-11 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-base shadow-xs shrink-0 border border-emerald-200/60">
+                        <Wallet size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Total Verified Net Worth</p>
+                        <p className="text-2xl font-black text-slate-900 mt-0.5 tracking-tight font-mono">
+                          {formatCurrency(myWalletNetWorth)}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 mt-2 font-mono text-xs text-slate-300">
-                      <span>{connectedWallet}</span>
-                      <button onClick={() => handleCopy(connectedWallet)} className="text-slate-400 hover:text-white transition-colors">
-                        {copiedAddress === connectedWallet ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                      </button>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-3 bg-white/10 backdrop-blur-sm p-3 rounded-xl border border-white/10">
-                    <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-                      {connectedNetwork === 'Solana' ? (
-                        <img src="https://upload.wikimedia.org/wikipedia/en/b/b9/Solana_logo.png" className="w-5 h-5 rounded-full object-cover" alt="Sol" />
-                      ) : (
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" className="w-5 h-5" alt="EVM" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-slate-300 uppercase font-bold">Network Scope</div>
-                      {connectedNetwork === 'Solana' ? (
-                        <span className="text-xs font-bold text-white">Solana Mainnet</span>
-                      ) : (
-                        <select 
-                          value={connectedNetwork || 'Omnichain'} 
-                          onChange={(e) => {
-                            const net = e.target.value;
-                            setConnectedNetwork(net);
-                            localStorage.setItem('my_connected_network', net);
-                          }}
-                          className="bg-transparent text-xs font-bold text-white outline-none cursor-pointer"
-                        >
-                          <option value="Omnichain" className="text-slate-900">Omnichain (All EVM)</option>
-                          <option value="Ethereum" className="text-slate-900">Ethereum</option>
-                          <option value="BSC" className="text-slate-900">BNB Smart Chain</option>
-                          <option value="Base Chain" className="text-slate-900">Base Network</option>
-                          <option value="Robinhood" className="text-slate-900">Robinhood</option>
-                        </select>
-                      )}
+                    <div className="flex items-center flex-wrap gap-2.5">
+                      <div className="bg-slate-50 border border-slate-200/90 rounded-lg px-3 py-1.5 flex items-center gap-2 text-xs font-mono text-slate-600">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 font-sans">Wallet:</span>
+                        <span>{truncateAddress(connectedWallet, 8, 6)}</span>
+                        <button onClick={() => handleCopy(connectedWallet)} className="text-slate-400 hover:text-slate-700 transition-colors" title="Copy Wallet Address">
+                          {copiedAddress === connectedWallet ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
+                        </button>
+                      </div>
+
+                      <div className="bg-slate-50 border border-slate-200/90 rounded-lg px-3 py-1.5 flex items-center gap-2 text-xs">
+                        <span className="text-[10px] uppercase font-bold text-slate-400">Network:</span>
+                        {connectedNetwork === 'Solana' ? (
+                          <span className="font-bold text-slate-800">Solana Mainnet</span>
+                        ) : (
+                          <select 
+                            value={connectedNetwork || 'Omnichain'} 
+                            onChange={(e) => {
+                              const net = e.target.value;
+                              setConnectedNetwork(net);
+                              localStorage.setItem('my_connected_network', net);
+                            }}
+                            className="bg-transparent font-bold text-slate-800 outline-none cursor-pointer text-xs"
+                          >
+                            <option value="Omnichain">Omnichain (All EVM)</option>
+                            <option value="Ethereum">Ethereum</option>
+                            <option value="BSC">BNB Smart Chain</option>
+                            <option value="Base Chain">Base Network</option>
+                            <option value="Robinhood">Robinhood</option>
+                          </select>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
