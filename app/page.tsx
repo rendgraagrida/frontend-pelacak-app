@@ -687,9 +687,11 @@ export default function Dashboard() {
 
   const handleAddHolderToWatchlist = async (address: string, coinName: string, index: number) => {
     try {
+      const cleanCoinName = coinName ? coinName.trim() : 'Coin';
+      const targetLabel = `${cleanCoinName} ${index + 1}`;
       const response = await axios.post('/api/watchlist', {
         wallet_address: address,
-        label: `Whale #${index + 1} - ${coinName}`,
+        label: targetLabel,
         chain_network: holdersChainNetwork || 'Unknown',
       });
       if (response.data.error) {
@@ -697,7 +699,7 @@ export default function Dashboard() {
         return;
       }
       setAddedHolders(prev => ({...prev, [address]: true}));
-      alert(`Target wallet ${address.slice(0, 6)}... added to Wallet Tracker!`);
+      alert(`Target wallet ${address.slice(0, 6)}... (${targetLabel}) added to Wallet Tracker!`);
       fetchWatchlist();
     } catch (error: any) {
       alert(error.response?.data?.error || "Failed to add target to Wallet Tracker");
