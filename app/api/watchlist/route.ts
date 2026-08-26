@@ -156,3 +156,33 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+export async function PATCH(request: Request) {
+  try {
+    const supabase = getSupabase();
+    if (!supabase) {
+      return NextResponse.json({ error: "Database belum terkonfigurasi" }, { status: 500 });
+    }
+
+    const { wallet_address, chain_network, label } = await request.json();
+    if (!wallet_address || !chain_network) {
+      return NextResponse.json({ error: "Data dompet tidak lengkap" }, { status: 400 });
+    }
+
+    const safeAddress = wallet_address.toString().trim();
+    const newLabel = (label || "Unknown Target").trim();
+
+    const { data, error } = await supabase
+      .from('watchlist')
+      .update({ label: newLabel })
+      .match({ 
+        wallet_address: safeAddress, 
+        chain_network: chain_network 
+      });
+
+    if (error) throw error;
+    return NextResponse.json({ success: true, data });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}

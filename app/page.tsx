@@ -4,7 +4,7 @@ import React, { useState, useEffect, Fragment, useRef } from 'react';
 import axios from 'axios';
 import { 
   LayoutGrid, ShieldCheck, Plus, X, ChevronDown, ChevronUp, 
-  Loader2, Copy, Check, ExternalLink, Wallet, Trash2, ArrowUpDown, Filter, Search, AlertTriangle, Shield, Ban, RefreshCw, TrendingUp, TrendingDown, Activity, Users, Clock, Timer, History
+  Loader2, Copy, Check, ExternalLink, Wallet, Trash2, ArrowUpDown, Filter, Search, AlertTriangle, Shield, Ban, RefreshCw, TrendingUp, TrendingDown, Activity, Users, Clock, Timer, History, Pencil
 } from 'lucide-react';
 import TradeHistoryModal from './components/TradeHistoryModal';
 import { truncateAddress } from '@/app/lib/utils';
@@ -97,6 +97,10 @@ export default function Dashboard() {
   const [networkFilter, setNetworkFilter] = useState('All');
   const [walletFilter, setWalletFilter] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'net_worth', direction: 'desc' });
+
+  const [editingWalletKey, setEditingWalletKey] = useState<string | null>(null);
+  const [editingLabelValue, setEditingLabelValue] = useState<string>('');
+  const [isSavingLabel, setIsSavingLabel] = useState<boolean>(false);
 
   useEffect(() => {
     setWalletPage(1);
@@ -454,6 +458,49 @@ export default function Dashboard() {
       alert(error.response?.data?.error || "Failed to add target wallet");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const startEditingLabel = (wallet: WalletItem) => {
+    const memoryKey = `${wallet.wallet_address}-${wallet.chain_network}`;
+    setEditingWalletKey(memoryKey);
+    setEditingLabelValue(wallet.label || '');
+  };
+
+  const cancelEditingLabel = () => {
+    setEditingWalletKey(null);
+    setEditingLabelValue('');
+  };
+
+  const handleSaveLabel = async (walletAddress: string, chainNetwork: string) => {
+    if (!editingLabelValue.trim()) {
+      alert("Target label cannot be empty!");
+      return;
+    }
+    try {
+      setIsSavingLabel(true);
+      const res = await axios.patch('/api/watchlist', {
+        wallet_address: walletAddress,
+        chain_network: chainNetwork,
+        label: editingLabelValue.trim(),
+      });
+      if (res.data.error) {
+        alert(`[FAILED] ${res.data.error}`);
+        return;
+      }
+      setWallets((prev) =>
+        prev.map((w) => {
+          if (w.wallet_address === walletAddress && w.chain_network === chainNetwork) {
+            return { ...w, label: editingLabelValue.trim() };
+          }
+          return w;
+        })
+      );
+      setEditingWalletKey(null);
+    } catch (err: any) {
+      alert(err.response?.data?.error || "Failed to update target label");
+    } finally {
+      setIsSavingLabel(false);
     }
   };
 
@@ -1207,9 +1254,51 @@ export default function Dashboard() {
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5">
-                                <h3 className="font-bold text-slate-900 text-base leading-tight truncate" title={wallet.label || wallet.wallet_address}>
-                                  {wallet.label || 'Unknown Target'}
-                                </h3>
+                                {editingWalletKey === memoryKey ? (
+                                  <div className="flex items-center gap-1.5 py-0.5">
+                                    <input
+                                      type="text"
+                                      value={editingLabelValue}
+                                      onChange={(e) => setEditingLabelValue(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleSaveLabel(wallet.wallet_address, wallet.chain_network);
+                                        if (e.key === 'Escape') cancelEditingLabel();
+                                      }}
+                                      autoFocus
+                                      placeholder="Target name..."
+                                      className="text-xs font-bold text-slate-900 bg-white border border-blue-400 rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs w-36"
+                                    />
+                                    <button
+                                      onClick={() => handleSaveLabel(wallet.wallet_address, wallet.chain_network)}
+                                      disabled={isSavingLabel}
+                                      className="p-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors"
+                                      title="Save label"
+                                    >
+                                      {isSavingLabel ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                                    </button>
+                                    <button
+                                      onClick={cancelEditingLabel}
+                                      disabled={isSavingLabel}
+                                      className="p-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 transition-colors"
+                                      title="Cancel"
+                                    >
+                                      <X size={12} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 group/label">
+                                    <h3 className="font-bold text-slate-900 text-base leading-tight truncate max-w-[190px]" title={wallet.label || wallet.wallet_address}>
+                                      {wallet.label || 'Unknown Target'}
+                                    </h3>
+                                    <button
+                                      onClick={() => startEditingLabel(wallet)}
+                                      className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                      title="Edit target label"
+                                    >
+                                      <Pencil size={12} />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                               <div className="flex items-center flex-wrap gap-1.5 mt-1">
                                 <span className="text-[10px] font-bold tracking-wider uppercase bg-blue-50 text-blue-700 border border-blue-200/60 px-1.5 py-0.5 rounded">
