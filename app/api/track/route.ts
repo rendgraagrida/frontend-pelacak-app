@@ -219,7 +219,7 @@ export async function PATCH(request: Request) {
 
     const cleanAddress = contract_address.toString().trim();
 
-    // Enforce max 3 primary coins
+    // Enforce max 5 primary coins
     if (is_primary === true) {
       const { data: existing } = await supabase
         .from('tracked_coins')
@@ -230,9 +230,9 @@ export async function PATCH(request: Request) {
         (c: any) => c.contract_address.toLowerCase() !== cleanAddress.toLowerCase()
       );
 
-      if (currentPrimary.length >= 3) {
+      if (currentPrimary.length >= 5) {
         return NextResponse.json({
-          error: 'Maksimal 3 coin utama. Lepas pin dari coin lain terlebih dahulu.',
+          error: 'Maksimal 5 coin utama. Lepas pin dari coin lain terlebih dahulu.',
           limitReached: true
         }, { status: 400 });
       }

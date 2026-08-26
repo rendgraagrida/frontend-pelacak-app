@@ -887,7 +887,7 @@ export default function Dashboard() {
         is_primary: newVal
       });
       if (res.data?.limitReached || res.data?.error) {
-        alert(res.data.error || 'Maksimal 3 coin utama.');
+        alert(res.data.error || 'Maksimal 5 coin utama.');
         // Rollback
         setTrackedCoins(prev => prev.map(c =>
           c.contract_address === coin.contract_address ? { ...c, is_primary: coin.is_primary } : c
@@ -916,7 +916,7 @@ export default function Dashboard() {
         is_primary: newVal
       });
       if (res.data?.limitReached || res.data?.error) {
-        alert(res.data.error || 'Maksimal 3 wallet utama.');
+        alert(res.data.error || 'Maksimal 5 wallet utama.');
         // Rollback
         setWallets(prev => prev.map(w =>
           w.wallet_address === wallet.wallet_address ? { ...w, is_primary: wallet.is_primary } : w
@@ -1474,6 +1474,19 @@ export default function Dashboard() {
                                 <span className="text-[10px] font-bold tracking-wider uppercase bg-blue-50 text-blue-700 border border-blue-200/60 px-1.5 py-0.5 rounded">
                                   {wallet.chain_network}
                                 </span>
+                                {/* ⭐ Small Primary Pin Button */}
+                                <button
+                                  onClick={() => handleTogglePrimaryWallet(wallet)}
+                                  className={`px-1.5 py-0.5 rounded border flex items-center gap-1 transition-all ${
+                                    wallet.is_primary
+                                      ? 'bg-amber-50 hover:bg-amber-100 text-amber-600 border-amber-300'
+                                      : 'bg-white hover:bg-slate-50 text-slate-400 hover:text-amber-500 border-slate-200'
+                                  }`}
+                                  title={wallet.is_primary ? 'Lepas dari Primary Monitor' : 'Jadikan Primary Monitor (maks 5)'}
+                                >
+                                  <Star size={11} className={wallet.is_primary ? 'fill-amber-400 text-amber-400' : ''} />
+                                  <span className="text-[9px] font-bold uppercase tracking-wider">{wallet.is_primary ? 'Primary' : 'Pin'}</span>
+                                </button>
                               </div>
                               <div className="flex items-center gap-1.5 mt-1 text-[11px] font-mono text-slate-400">
                                 <span className="truncate">{truncateAddress(wallet.wallet_address, 8, 6)}</span>
@@ -1533,19 +1546,6 @@ export default function Dashboard() {
 
                           {/* 3. Action Buttons */}
                           <div className="w-full lg:w-auto lg:shrink-0 flex items-center lg:justify-end gap-1.5 self-start lg:self-center">
-                            {/* ⭐ Primary Pin Button */}
-                            <button
-                              onClick={() => handleTogglePrimaryWallet(wallet)}
-                              className={`px-3 py-1.5 rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-all border shadow-2xs ${
-                                wallet.is_primary
-                                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-600 border-amber-300'
-                                  : 'bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 border-slate-200'
-                              }`}
-                              title={wallet.is_primary ? 'Lepas dari Primary Monitor' : 'Jadikan Primary Monitor (maks 3)'}
-                            >
-                              <Star size={13} className={wallet.is_primary ? 'fill-amber-400 text-amber-400' : ''} />
-                              <span>{wallet.is_primary ? 'Primary' : 'Pin'}</span>
-                            </button>
                             {isSupported ? (
                               <button 
                                 onClick={() => handleToggleTokens(wallet.wallet_address, wallet.chain_network)}
@@ -2056,6 +2056,19 @@ export default function Dashboard() {
                                 <span className="text-[10px] font-bold tracking-wider uppercase bg-slate-100 text-slate-700 border border-slate-200/60 px-1.5 py-0.5 rounded">
                                   {coin.chain_id}
                                 </span>
+                                {/* ⭐ Small Primary Pin Button */}
+                                <button
+                                  onClick={() => handleTogglePrimaryCoin(coin)}
+                                  className={`px-1.5 py-0.5 rounded border flex items-center gap-1 transition-all ${
+                                    coin.is_primary
+                                      ? 'bg-amber-50 hover:bg-amber-100 text-amber-600 border-amber-300'
+                                      : 'bg-white hover:bg-slate-50 text-slate-400 hover:text-amber-500 border-slate-200'
+                                  }`}
+                                  title={coin.is_primary ? 'Lepas dari Primary Monitor' : 'Jadikan Primary Monitor (maks 5)'}
+                                >
+                                  <Star size={11} className={coin.is_primary ? 'fill-amber-400 text-amber-400' : ''} />
+                                  <span className="text-[9px] font-bold uppercase tracking-wider">{coin.is_primary ? 'Primary' : 'Pin'}</span>
+                                </button>
                                 {coin.label && coin.label !== coin.name && (
                                   <span className="text-[10px] font-semibold bg-blue-50 text-blue-600 border border-blue-200/60 px-1.5 py-0.5 rounded truncate max-w-[90px]" title={coin.label}>
                                     {coin.label}
@@ -2135,19 +2148,6 @@ export default function Dashboard() {
 
                           {/* 3. Spacious Action Buttons Bar */}
                           <div className="w-full lg:w-auto lg:shrink-0 flex items-center lg:justify-end gap-1.5 self-start lg:self-center">
-                            {/* ⭐ Primary Pin Button */}
-                            <button
-                              onClick={() => handleTogglePrimaryCoin(coin)}
-                              className={`px-3 py-1.5 rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-all border shadow-2xs ${
-                                coin.is_primary
-                                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-600 border-amber-300'
-                                  : 'bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-500 border-slate-200'
-                              }`}
-                              title={coin.is_primary ? 'Lepas dari Primary Monitor' : 'Jadikan Primary Monitor (maks 3)'}
-                            >
-                              <Star size={13} className={coin.is_primary ? 'fill-amber-400 text-amber-400' : ''} />
-                              <span>{coin.is_primary ? 'Primary' : 'Pin'}</span>
-                            </button>
                             <TradeHistoryModal coin={coin} />
                             
                             <button 

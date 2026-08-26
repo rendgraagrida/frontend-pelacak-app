@@ -174,7 +174,7 @@ export async function PATCH(request: Request) {
 
     // Handle is_primary toggle separately
     if (is_primary !== undefined) {
-      // Enforce max 3 primary wallets
+      // Enforce max 5 primary wallets
       if (is_primary === true) {
         const { data: existing } = await supabase
           .from('watchlist')
@@ -185,9 +185,9 @@ export async function PATCH(request: Request) {
           (w: any) => w.wallet_address.toLowerCase() !== safeAddress.toLowerCase()
         );
 
-        if (currentPrimary.length >= 3) {
+        if (currentPrimary.length >= 5) {
           return NextResponse.json({
-            error: 'Maksimal 3 wallet utama. Lepas pin dari wallet lain terlebih dahulu.',
+            error: 'Maksimal 5 wallet utama. Lepas pin dari wallet lain terlebih dahulu.',
             limitReached: true
           }, { status: 400 });
         }
