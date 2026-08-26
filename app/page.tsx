@@ -4,7 +4,7 @@ import React, { useState, useEffect, Fragment, useRef } from 'react';
 import axios from 'axios';
 import { 
   LayoutGrid, ShieldCheck, Plus, X, ChevronDown, ChevronUp, 
-  Loader2, Copy, Check, ExternalLink, Wallet, Trash2, ArrowUpDown, Filter, Search, AlertTriangle, Shield, Ban, RefreshCw, TrendingUp, TrendingDown, Activity, Users, Clock, Timer, History, Pencil
+  Loader2, Copy, Check, ExternalLink, Wallet, Trash2, ArrowUpDown, Filter, Search, AlertTriangle, Shield, Ban, RefreshCw, TrendingUp, TrendingDown, Activity, Users, Clock, Timer, History, Pencil, Send, Radio
 } from 'lucide-react';
 import TradeHistoryModal from './components/TradeHistoryModal';
 import { truncateAddress, formatCompactUSD, formatCompactNumber } from '@/app/lib/utils';
@@ -158,6 +158,51 @@ export default function Dashboard() {
   const [holdersTotalCount, setHoldersTotalCount] = useState<number | null>(null);
   const [addedHolders, setAddedHolders] = useState<Record<string, boolean>>({});
 
+  // Telegram Alerts & Radar State
+  const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
+  const [isSendingTelegramTest, setIsSendingTelegramTest] = useState(false);
+  const [isScanningTelegramRadar, setIsScanningTelegramRadar] = useState(false);
+  const [telegramStatus, setTelegramStatus] = useState<any>(null);
+
+  const fetchTelegramStatus = async () => {
+    try {
+      const res = await axios.get('/api/tele-bot');
+      setTelegramStatus(res.data);
+    } catch (err) {}
+  };
+
+  const handleSendTelegramTest = async () => {
+    try {
+      setIsSendingTelegramTest(true);
+      const res = await axios.post('/api/tele-bot', { action: 'test' });
+      if (res.data.success) {
+        alert('✅ Test alert message sent to your Telegram! Check your phone/app.');
+      } else {
+        alert(`❌ [FAILED] ${res.data.error || 'Could not send test message'}`);
+      }
+    } catch (err: any) {
+      alert(`❌ [ERROR] ${err.response?.data?.error || err.message}`);
+    } finally {
+      setIsSendingTelegramTest(false);
+    }
+  };
+
+  const handleRunTelegramRadarScan = async () => {
+    try {
+      setIsScanningTelegramRadar(true);
+      const res = await axios.post('/api/tele-bot', { action: 'scan_and_alert' });
+      if (res.data.success) {
+        alert(`🔍 Radar scan complete!\n• Scanned: ${res.data.scannedCoins} coins & ${res.data.scannedWallets} wallets\n• Alerts dispatched: ${res.data.alertsSent}`);
+      } else {
+        alert(`❌ [FAILED] ${res.data.error || 'Scan failed'}`);
+      }
+    } catch (err: any) {
+      alert(`❌ [ERROR] ${err.response?.data?.error || err.message}`);
+    } finally {
+      setIsScanningTelegramRadar(false);
+    }
+  };
+
   // History Modal State
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [historyData, setHistoryData] = useState<any[]>([]);
@@ -267,6 +312,9 @@ export default function Dashboard() {
       setConnectedWallet(savedWallet);
       setConnectedNetwork(savedNetwork);
     }
+
+    // Check Telegram Bot connection status
+    fetchTelegramStatus();
   }, []);
 
   // Auto-refresh timer for Track Coin tab
@@ -1086,6 +1134,17 @@ export default function Dashboard() {
                   <span>Blacklist Coin</span>
                 </button>
               </div>
+
+              {/* TELEGRAM ALERTS BUTTON */}
+              <button 
+                onClick={() => setIsTelegramModalOpen(true)}
+                className="px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 border shadow-2xs bg-sky-50 border-sky-200/70 text-sky-700 hover:bg-sky-100/80 cursor-pointer"
+                title="Telegram Real-Time Alerts & Radar Controls"
+              >
+                <Send size={13} className="text-sky-600" />
+                <span className="hidden sm:inline">Telegram Alerts</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              </button>
 
               {/* CONNECT WALLET BUTTON */}
               <div className="relative">
@@ -2880,6 +2939,156 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TELEGRAM BOT & REAL-TIME ALERTS */}
+      {isTelegramModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+            
+            {/* Header */}
+            <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100 bg-slate-50/80">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center border border-sky-200/60 shadow-2xs">
+                  <Send size={16} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    Telegram Radar & Real-Time Alerts
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Automated on-chain notifications sent directly to your phone.
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsTelegramModalOpen(false)} 
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5">
+              
+              {/* Bot Connection Status Banner */}
+              <div className="p-4 rounded-xl border border-sky-100 bg-sky-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse shrink-0"></div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-slate-900">
+                        {telegramStatus?.botInfo?.first_name ? `${telegramStatus.botInfo.first_name} (@${telegramStatus.botInfo.username})` : 'Pelacak Radar Bot'}
+                      </h4>
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                        {telegramStatus?.botOnline ? 'Online & Ready' : 'Connected'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-mono mt-0.5">
+                      Target Chat ID: {telegramStatus?.targetChatId || 'Configured via .env'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={handleSendTelegramTest}
+                    disabled={isSendingTelegramTest}
+                    className="flex-1 sm:flex-initial px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  >
+                    {isSendingTelegramTest ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                    <span>Send Test Alert</span>
+                  </button>
+
+                  <button
+                    onClick={handleRunTelegramRadarScan}
+                    disabled={isScanningTelegramRadar}
+                    className="flex-1 sm:flex-initial px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  >
+                    {isScanningTelegramRadar ? <Loader2 size={13} className="animate-spin" /> : <Radio size={13} />}
+                    <span>Run Scanner Now</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Active Radar Triggers */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2.5">
+                  Automated Triggers
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs">
+                    <div className="flex items-center gap-2 text-indigo-700 font-bold text-xs mb-1">
+                      <Wallet size={14} /> Whale Radar (0x Moves)
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Instantly alerts on large balance shifts and swaps from tracked target wallets.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs">
+                    <div className="flex items-center gap-2 text-emerald-700 font-bold text-xs mb-1">
+                      <Activity size={14} /> RSI Extreme Signals
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Dispatches alerts when tracked coins hit RSI &lt; 30 (Oversold) or &gt; 70 (Overbought).
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs">
+                    <div className="flex items-center gap-2 text-purple-700 font-bold text-xs mb-1">
+                      <TrendingUp size={14} /> Volume Explosion
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Monitors 24h DEX volume surges exceeding $1M or abnormal liquidity influx.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Telegram Interactive Commands Cheat Sheet */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2.5">
+                  Interactive Telegram Bot Commands
+                </h4>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 divide-y divide-slate-200/80 text-xs overflow-hidden">
+                  <div className="p-2.5 flex items-center justify-between">
+                    <code className="font-bold text-sky-700 bg-sky-100/80 px-2 py-0.5 rounded">/summary</code>
+                    <span className="text-slate-600 font-medium text-right">View portfolio net worth & tracking overview</span>
+                  </div>
+                  <div className="p-2.5 flex items-center justify-between">
+                    <code className="font-bold text-sky-700 bg-sky-100/80 px-2 py-0.5 rounded">/watchlist</code>
+                    <span className="text-slate-600 font-medium text-right">List all active target wallets and native balances</span>
+                  </div>
+                  <div className="p-2.5 flex items-center justify-between">
+                    <code className="font-bold text-sky-700 bg-sky-100/80 px-2 py-0.5 rounded">/coins</code>
+                    <span className="text-slate-600 font-medium text-right">Check live prices, 24h % and RSI status</span>
+                  </div>
+                  <div className="p-2.5 flex items-center justify-between">
+                    <code className="font-bold text-sky-700 bg-sky-100/80 px-2 py-0.5 rounded">/scan</code>
+                    <span className="text-slate-600 font-medium text-right">Force immediate radar scan and dispatch pending alerts</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
+              <span className="text-[11px] text-slate-400">
+                Powered by Pelacak Multichain Radar Engine
+              </span>
+              <button
+                onClick={() => setIsTelegramModalOpen(false)}
+                className="px-4 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+
           </div>
         </div>
       )}
