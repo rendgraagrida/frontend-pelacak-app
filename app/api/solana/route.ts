@@ -244,7 +244,10 @@ export async function POST(request: Request) {
         totalValue = t.amount * price;
       }
 
-      // 🚫 BLACKLIST: Prioritas tertinggi — paksa spam jika ada di blacklist
+      // 🚫 SPAM / QUARANTINE FILTER:
+      // 1. Blacklist -> Paksa spam
+      // 2. VIP -> Selalu lolos
+      // 3. Unknown price / 0 USD value / Scam keywords -> Karantina sebagai spam
       let isSpam = false;
       if (isBlacklisted) {
         isSpam = true;
@@ -252,6 +255,10 @@ export async function POST(request: Request) {
         const lowerName = tokenName.toLowerCase();
         const lowerUri = (onChain.uri || "").toLowerCase();
         if (
+          !price || 
+          price <= 0 || 
+          !totalValue || 
+          totalValue <= 0 ||
           lowerName.includes("giftbox") || 
           lowerName.includes("claim") || 
           lowerName.includes("reward") || 

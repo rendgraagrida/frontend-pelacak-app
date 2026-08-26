@@ -220,14 +220,20 @@ export async function POST(request: Request) {
       let isSpam = false;
       const validLogo = (typeof dexInfo.logo === 'string' && dexInfo.logo.length > 5) || (typeof meta.logo === 'string' && meta.logo.length > 5);
 
-      // 🚫 BLACKLIST: Prioritas tertinggi — paksa spam jika ada di blacklist
+      // 🚫 SPAM / QUARANTINE FILTER:
+      // 1. Blacklist -> Paksa spam
+      // 2. VIP -> Selalu lolos
+      // 3. Unknown price / 0 USD value / No logo -> Karantina sebagai spam
       if (BLACKLISTED_TOKENS.includes(contract)) {
         isSpam = true;
       } else if (VIP_TOKENS.includes(contract)) {
         isSpam = false;
       } else {
-        if (!validLogo && totalValueUsd > 0) isSpam = true;
-        else if (totalValueUsd < 0.01 && !validLogo) isSpam = true;
+        if (!priceUsd || priceUsd <= 0 || !totalValueUsd || totalValueUsd <= 0) {
+          isSpam = true;
+        } else if (!validLogo && totalValueUsd < 0.01) {
+          isSpam = true;
+        }
       }
 
       return {

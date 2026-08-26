@@ -114,6 +114,7 @@ export default function Dashboard() {
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   
   const [showSpam, setShowSpam] = useState<Record<string, boolean>>({});
+  const [showMyWalletSpam, setShowMyWalletSpam] = useState(false);
 
   const isSyncing = useRef(false);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
@@ -307,7 +308,15 @@ export default function Dashboard() {
         const promises = chains.map(async (chain) => {
           try {
             const response = await axios.post('/api/tokens', { wallet_address: connectedWallet, chain_network: chain, page: 1 });
-            return (response.data.tokens || []).map((t: any) => ({ ...t, injected_chain: chain }));
+            return (response.data.tokens || []).map((t: any) => {
+              const isNative = t.contract_address === 'NATIVE_COIN';
+              const isZeroOrUnknown = !isNative && (!t.price_usd || t.price_usd <= 0 || !t.total_value_usd || t.total_value_usd <= 0);
+              return { 
+                ...t, 
+                injected_chain: chain, 
+                is_spam: Boolean(t.is_spam || isZeroOrUnknown) 
+              };
+            });
           } catch(e) { return []; }
         });
         const results = await Promise.all(promises);
@@ -323,7 +332,15 @@ export default function Dashboard() {
         const isSolana = connectedNetwork.toUpperCase() === 'SOLANA';
         const endpoint = isSolana ? '/api/solana' : '/api/tokens';
         const response = await axios.post(endpoint, { wallet_address: connectedWallet, chain_network: connectedNetwork, page: 1 });
-        const newTokens = (response.data.tokens || []).map((t: any) => ({ ...t, injected_chain: connectedNetwork }));
+        const newTokens = (response.data.tokens || []).map((t: any) => {
+          const isNative = t.contract_address === 'NATIVE_COIN';
+          const isZeroOrUnknown = !isNative && (!t.price_usd || t.price_usd <= 0 || !t.total_value_usd || t.total_value_usd <= 0);
+          return { 
+            ...t, 
+            injected_chain: connectedNetwork, 
+            is_spam: Boolean(t.is_spam || isZeroOrUnknown) 
+          };
+        });
         setMyWalletTokens(newTokens);
         const netWorth = newTokens.filter((t: any) => !t.is_spam).reduce((sum: number, token: any) => sum + (token.total_value_usd || 0), 0);
         setMyWalletNetWorth(netWorth);
@@ -354,7 +371,15 @@ export default function Dashboard() {
       const isSolana = chainNetwork.toUpperCase() === 'SOLANA';
       const endpoint = isSolana ? '/api/solana' : '/api/tokens';
       const response = await axios.post(endpoint, { wallet_address: walletAddress, chain_network: chainNetwork, page: 1 });
-      const newTokens = response.data.tokens || [];
+      const rawTokens = response.data.tokens || [];
+      const newTokens = rawTokens.map((t: any) => {
+        const isNative = t.contract_address === 'NATIVE_COIN';
+        const isZeroOrUnknown = !isNative && (!t.price_usd || t.price_usd <= 0 || !t.total_value_usd || t.total_value_usd <= 0);
+        return { 
+          ...t, 
+          is_spam: Boolean(t.is_spam || isZeroOrUnknown) 
+        };
+      });
       setWalletTokens((prev) => ({ ...prev, [memoryKey]: newTokens }));
       setWalletHasNext((prev) => ({ ...prev, [memoryKey]: response.data.hasNextPage || false }));
       setWalletPages((prev) => ({ ...prev, [memoryKey]: 1 }));
@@ -431,7 +456,16 @@ export default function Dashboard() {
       const isSolana = chainNetwork.toUpperCase() === 'SOLANA';
       const endpoint = isSolana ? '/api/solana' : '/api/tokens';
       const response = await axios.post(endpoint, { wallet_address: walletAddress, chain_network: chainNetwork, page: nextPage });
-      setWalletTokens((prev) => ({ ...prev, [memoryKey]: [...(prev[memoryKey] || []), ...(response.data.tokens || [])] }));
+      const rawTokens = response.data.tokens || [];
+      const newTokens = rawTokens.map((t: any) => {
+        const isNative = t.contract_address === 'NATIVE_COIN';
+        const isZeroOrUnknown = !isNative && (!t.price_usd || t.price_usd <= 0 || !t.total_value_usd || t.total_value_usd <= 0);
+        return { 
+          ...t, 
+          is_spam: Boolean(t.is_spam || isZeroOrUnknown) 
+        };
+      });
+      setWalletTokens((prev) => ({ ...prev, [memoryKey]: [...(prev[memoryKey] || []), ...newTokens] }));
       setWalletHasNext((prev) => ({ ...prev, [memoryKey]: response.data.hasNextPage || false }));
       setWalletPages((prev) => ({ ...prev, [memoryKey]: nextPage }));
     } catch (e) {} finally {
@@ -2379,6 +2413,73 @@ export default function Dashboard() {
                           </div>
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* MY WALLET SPAM QUARANTINE ACCORDION */}
+                  {myWalletTokens.filter(t => t.is_spam).length > 0 && (
+                    <div className="mt-5 border border-rose-200 rounded-xl bg-rose-50/30 overflow-hidden">
+                      <button 
+                        onClick={() => setShowMyWalletSpam(prev => !prev)}
+                        className="w-full px-4 py-2.5 flex justify-between items-center bg-rose-50 hover:bg-rose-100 transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2 text-rose-700 font-bold text-xs">
+                          <AlertTriangle size={14} /> Quarantined Spam & Zero-Value Assets ({myWalletTokens.filter(t => t.is_spam).length})
+                        </div>
+                        {showMyWalletSpam ? <ChevronUp size={14} className="text-rose-500"/> : <ChevronDown size={14} className="text-rose-500"/>}
+                      </button>
+                      
+                      {showMyWalletSpam && (
+                        <div className="p-3.5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 border-t border-rose-100">
+                          {myWalletTokens.filter(t => t.is_spam).map((token, tIdx) => (
+                            <div key={`my-spam-${tIdx}`} className="bg-white p-2.5 rounded-lg border border-rose-100 opacity-90 hover:opacity-100 transition-opacity flex flex-col justify-between">
+                              <div>
+                                <div className="flex justify-between items-start mb-1.5">
+                                  <div className="min-w-0 flex-1 mr-2">
+                                    <h5 className="text-[11px] font-bold text-slate-700 flex items-center gap-1 truncate" title={token.name || token.symbol}>
+                                      <a
+                                        href={getDexScreenerUrl(connectedNetwork || 'solana', token.contract_address)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="hover:text-blue-600 hover:underline flex items-center gap-1 truncate"
+                                        title="Inspect chart on DexScreener"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <span className="truncate">{token.name || token.symbol}</span>
+                                        <ExternalLink size={9} className="text-slate-400 shrink-0" />
+                                      </a>
+                                    </h5>
+                                    <span className="text-[9px] font-mono text-slate-400 mt-0.5 block">{token.contract_address.slice(0, 6)}...{token.contract_address.slice(-4)}</span>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <span className="bg-rose-100 text-rose-700 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                                      {formatCurrency(token.total_value_usd)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              {token.contract_address !== 'NATIVE_COIN' && (
+                                <div className="flex items-center gap-1.5 pt-1.5 border-t border-rose-50 text-[10px] mt-1.5">
+                                  <button 
+                                    onClick={() => handleQuickTrack(token.contract_address, token.name || token.symbol, connectedNetwork || 'solana')}
+                                    className="flex-1 py-1 px-1.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium flex items-center justify-center gap-1 transition-colors border border-emerald-100"
+                                    title="Unblock & Add to Coin Tracker"
+                                  >
+                                    <Activity size={10} /> + Track
+                                  </button>
+                                  <button 
+                                    onClick={() => handleQuickBlacklist(token.contract_address, token.name || token.symbol, connectedNetwork || 'solana')}
+                                    className="flex-1 py-1 px-1.5 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 font-medium flex items-center justify-center gap-1 transition-colors border border-rose-100"
+                                    title="Confirm Blacklist"
+                                  >
+                                    <Ban size={10} /> + Blacklist
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

@@ -37,4 +37,26 @@ describe('Security & Blacklist Spam Detection', () => {
   test('should treat empty or undefined token address as spam', () => {
     assert.equal(isTokenSpam('', sampleBlacklist), true);
   });
+
+  test('should quarantine token with unknown price or 0 total value as spam', () => {
+    const isSpamUnknown = isTokenSpam(
+      '0x1111111111111111111111111111111111111111',
+      sampleBlacklist,
+      false,
+      0, // price = 0 (Unknown)
+      0  // totalValue = 0
+    );
+    assert.equal(isSpamUnknown, true);
+  });
+
+  test('should allow non-blacklisted token with valid positive price and value', () => {
+    const isSpam = isTokenSpam(
+      '0x2222222222222222222222222222222222222222',
+      sampleBlacklist,
+      false,
+      1.50, // price > 0
+      150.0 // totalValue > 0
+    );
+    assert.equal(isSpam, false);
+  });
 });

@@ -118,13 +118,23 @@ export function getNetworkSlug(chainNetwork: string): string {
  */
 export function isTokenSpam(
   tokenAddress: string,
-  blacklistedAddresses: string[],
-  isNative: boolean = false
+  blacklistedAddresses: string[] = [],
+  isNative: boolean = false,
+  priceUsd?: number | null,
+  totalValueUsd?: number | null
 ): boolean {
   if (isNative) return false;
   if (!tokenAddress) return true;
   const cleanTarget = tokenAddress.toLowerCase().trim();
-  return blacklistedAddresses.some((addr) => addr.toLowerCase().trim() === cleanTarget);
+  if (blacklistedAddresses.some((addr) => addr.toLowerCase().trim() === cleanTarget)) {
+    return true;
+  }
+  if (priceUsd !== undefined && totalValueUsd !== undefined) {
+    if (!priceUsd || priceUsd <= 0 || !totalValueUsd || totalValueUsd <= 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
