@@ -1248,14 +1248,14 @@ export default function Dashboard() {
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                           
                           {/* 1. Wallet Identity */}
-                          <div className="flex items-center gap-3.5 min-w-[220px] lg:max-w-[260px] shrink-0">
+                          <div className="flex items-center gap-3.5 w-full lg:w-[260px] shrink-0">
                             <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-base shadow-xs shrink-0 border border-blue-200/60">
                               <Wallet size={18} />
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
+                            <div className="min-w-0 flex-1 overflow-hidden">
+                              <div className="flex items-center gap-1.5 min-w-0">
                                 {editingWalletKey === memoryKey ? (
-                                  <div className="flex items-center gap-1.5 py-0.5">
+                                  <div className="flex items-center gap-1.5 py-0.5 min-w-0">
                                     <input
                                       type="text"
                                       value={editingLabelValue}
@@ -1266,12 +1266,12 @@ export default function Dashboard() {
                                       }}
                                       autoFocus
                                       placeholder="Target name..."
-                                      className="text-xs font-bold text-slate-900 bg-white border border-blue-400 rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs w-32"
+                                      className="text-xs font-bold text-slate-900 bg-white border border-blue-400 rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs w-28"
                                     />
                                     <button
                                       onClick={() => handleSaveLabel(wallet.wallet_address, wallet.chain_network)}
                                       disabled={isSavingLabel}
-                                      className="p-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors"
+                                      className="p-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors shrink-0"
                                       title="Save label"
                                     >
                                       {isSavingLabel ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
@@ -1279,7 +1279,7 @@ export default function Dashboard() {
                                     <button
                                       onClick={cancelEditingLabel}
                                       disabled={isSavingLabel}
-                                      className="p-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 transition-colors"
+                                      className="p-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 transition-colors shrink-0"
                                       title="Cancel"
                                     >
                                       <X size={12} />
@@ -1287,7 +1287,7 @@ export default function Dashboard() {
                                   </div>
                                 ) : (
                                   <div className="flex items-center gap-1.5 group/label min-w-0">
-                                    <h3 className="font-bold text-slate-900 text-base leading-tight truncate" title={wallet.label || wallet.wallet_address}>
+                                    <h3 className="font-bold text-slate-900 text-sm sm:text-base leading-tight truncate" title={wallet.label || wallet.wallet_address}>
                                       {wallet.label || 'Unknown Target'}
                                     </h3>
                                     <button
@@ -1359,7 +1359,7 @@ export default function Dashboard() {
                           </div>
 
                           {/* 3. Action Buttons */}
-                          <div className="flex items-center flex-wrap sm:flex-nowrap gap-2 self-start lg:self-center shrink-0">
+                          <div className="w-full lg:w-auto lg:shrink-0 flex items-center lg:justify-end gap-1.5 self-start lg:self-center">
                             {isSupported ? (
                               <button 
                                 onClick={() => handleToggleTokens(wallet.wallet_address, wallet.chain_network)}
@@ -1389,7 +1389,7 @@ export default function Dashboard() {
 
                             <button 
                               onClick={() => handleDeleteWallet(wallet.wallet_address, wallet.chain_network)} 
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100 ml-1"
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
                               title="Delete Target Wallet"
                             >
                               <Trash2 size={15} />
@@ -1772,20 +1772,20 @@ export default function Dashboard() {
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                           
                           {/* 1. Token Identity */}
-                          <div className="flex items-center gap-3.5 min-w-[220px] lg:max-w-[260px] shrink-0">
+                          <div className="flex items-center gap-3.5 w-full lg:w-[260px] shrink-0">
                             {coin.logo ? (
-                              <img src={coin.logo} alt={coin.symbol} className="w-11 h-11 rounded-full bg-white shadow-xs object-cover border border-slate-100 shrink-0" />
+                              <img src={coin.logo} alt={coin.symbol} className="w-10 h-10 rounded-full bg-white shadow-xs object-cover border border-slate-100 shrink-0" />
                             ) : (
-                              <div className="w-11 h-11 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-base shadow-xs shrink-0">
+                              <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-base shadow-xs shrink-0">
                                 {coin.symbol?.charAt(0) || '?'}
                               </div>
                             )}
-                            <div className="min-w-0 flex-1">
+                            <div className="min-w-0 flex-1 overflow-hidden">
                               <div className="flex items-center gap-1.5 min-w-0">
-                                <h3 className="font-bold text-slate-900 text-base leading-tight truncate" title={coin.name}>
+                                <h3 className="font-bold text-slate-900 text-sm sm:text-base leading-tight truncate" title={coin.name}>
                                   {coin.name}
                                 </h3>
-                                <span className="text-slate-400 font-semibold text-xs shrink-0">
+                                <span className="text-slate-400 font-semibold text-xs shrink-0 uppercase">
                                   ({coin.symbol})
                                 </span>
                               </div>
@@ -1794,7 +1794,7 @@ export default function Dashboard() {
                                   {coin.chain_id}
                                 </span>
                                 {coin.label && coin.label !== coin.name && (
-                                  <span className="text-[10px] font-semibold bg-blue-50 text-blue-600 border border-blue-200/60 px-1.5 py-0.5 rounded truncate max-w-[100px]" title={coin.label}>
+                                  <span className="text-[10px] font-semibold bg-blue-50 text-blue-600 border border-blue-200/60 px-1.5 py-0.5 rounded truncate max-w-[90px]" title={coin.label}>
                                     {coin.label}
                                   </span>
                                 )}
@@ -1871,7 +1871,7 @@ export default function Dashboard() {
                           </div>
 
                           {/* 3. Spacious Action Buttons Bar */}
-                          <div className="flex items-center flex-wrap sm:flex-nowrap gap-2 self-start lg:self-center shrink-0">
+                          <div className="w-full lg:w-auto lg:shrink-0 flex items-center lg:justify-end gap-1.5 self-start lg:self-center">
                             <TradeHistoryModal coin={coin} />
                             
                             <button 
@@ -1880,7 +1880,7 @@ export default function Dashboard() {
                               title="View Top Whale Holders"
                             >
                               <Users size={13} className="text-emerald-600" />
-                              <span>Top Holders</span>
+                              <span>Holders</span>
                             </button>
 
                             <a 
@@ -2018,13 +2018,13 @@ export default function Dashboard() {
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                         
                         {/* 1. Identity */}
-                        <div className="flex items-center gap-3.5 min-w-[220px] lg:max-w-[260px] shrink-0">
-                          <div className="w-11 h-11 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-base shadow-xs shrink-0 border border-rose-200/60">
+                        <div className="flex items-center gap-3.5 w-full lg:w-[260px] shrink-0">
+                          <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-base shadow-xs shrink-0 border border-rose-200/60">
                             <Ban size={18} />
                           </div>
-                          <div className="min-w-0 flex-1">
+                          <div className="min-w-0 flex-1 overflow-hidden">
                             <div className="flex items-center gap-1.5 min-w-0">
-                              <h3 className="font-bold text-slate-900 text-base leading-tight truncate" title={item.label || item.contract_address}>
+                              <h3 className="font-bold text-slate-900 text-sm sm:text-base leading-tight truncate" title={item.label || item.contract_address}>
                                 {item.label || <span className="text-slate-400 italic font-normal">Untitled Token</span>}
                               </h3>
                             </div>
@@ -2074,7 +2074,7 @@ export default function Dashboard() {
                         </div>
 
                         {/* 3. Action Buttons */}
-                        <div className="flex items-center flex-wrap sm:flex-nowrap gap-2 self-start lg:self-center shrink-0">
+                        <div className="w-full lg:w-auto lg:shrink-0 flex items-center lg:justify-end gap-1.5 self-start lg:self-center">
                           <a 
                             href={getDexScreenerUrl(item.chain_network || 'solana', item.contract_address)} 
                             target="_blank" 
@@ -2255,20 +2255,20 @@ export default function Dashboard() {
                           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                             
                             {/* 1. Coin / Asset Identity */}
-                            <div className="flex items-center gap-3.5 min-w-[220px] lg:max-w-[260px] shrink-0">
-                              <div className="w-11 h-11 rounded-full bg-slate-100 border border-slate-200/80 overflow-hidden flex items-center justify-center font-bold text-base shadow-xs shrink-0">
+                            <div className="flex items-center gap-3.5 w-full lg:w-[260px] shrink-0">
+                              <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200/80 overflow-hidden flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
                                 {token.logo ? (
                                   <img src={token.logo} alt={token.symbol} className="w-full h-full object-cover" />
                                 ) : (
                                   <div className="text-xs font-bold text-slate-700">{token.symbol?.slice(0, 2).toUpperCase()}</div>
                                 )}
                               </div>
-                              <div className="min-w-0 flex-1">
+                              <div className="min-w-0 flex-1 overflow-hidden">
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                  <h3 className="font-bold text-slate-900 text-base leading-tight truncate" title={token.name}>
+                                  <h3 className="font-bold text-slate-900 text-sm sm:text-base leading-tight truncate" title={token.name}>
                                     {token.name}
                                   </h3>
-                                  <span className="text-xs font-bold text-slate-400 font-mono shrink-0">
+                                  <span className="text-xs font-bold text-slate-400 font-mono shrink-0 uppercase">
                                     {token.symbol}
                                   </span>
                                 </div>
@@ -2330,7 +2330,7 @@ export default function Dashboard() {
                             </div>
 
                             {/* 3. Action Buttons */}
-                            <div className="flex items-center flex-wrap sm:flex-nowrap gap-2 self-start lg:self-center shrink-0">
+                            <div className="w-full lg:w-auto lg:shrink-0 flex items-center lg:justify-end gap-1.5 self-start lg:self-center">
                               {token.contract_address !== 'NATIVE_COIN' && (
                                 <>
                                   <button 
@@ -2353,7 +2353,7 @@ export default function Dashboard() {
 
                                   <button 
                                     onClick={() => handleQuickBlacklist(token.contract_address, token.name || token.symbol, connectedNetwork || 'solana')}
-                                    className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-rose-200/60 shadow-2xs"
+                                    className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-rose-200/80 shadow-2xs"
                                     title="Add to Blacklist"
                                   >
                                     <Ban size={13} />
