@@ -156,11 +156,22 @@ export async function POST(request: Request) {
     }
 
     // 4. Ambil Harga Live USD dari DexScreener (Batch up to 30)
+    const KNOWN_EVM_STABLES: Record<string, { price_usd: number; logo: string | null }> = {
+      '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': { price_usd: 1.0, logo: 'https://static.alchemyapi.io/images/assets/3408.png' }, // USDC ETH
+      '0xdac17f958d2ee523a2206206994597c13d831ec7': { price_usd: 1.0, logo: 'https://static.alchemyapi.io/images/assets/825.png' },  // USDT ETH
+      '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d': { price_usd: 1.0, logo: 'https://static.alchemyapi.io/images/assets/3408.png' }, // USDC BSC
+      '0x55d398326f99059ff775485246999027b3197955': { price_usd: 1.0, logo: 'https://static.alchemyapi.io/images/assets/825.png' },  // USDT BSC
+      '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913': { price_usd: 1.0, logo: 'https://static.alchemyapi.io/images/assets/3408.png' }, // USDC BASE
+    };
+    const KNOWN_EVM_SET = new Set(Object.keys(KNOWN_EVM_STABLES).map(k => k.toLowerCase()));
+
     const dexMetaMap: Record<string, { price_usd: number, logo: string | null }> = {};
-    if (contractAddresses.length > 0) {
+    const validContractsForPricing = contractAddresses.filter(c => !KNOWN_EVM_SET.has(c.toLowerCase()));
+    
+    if (validContractsForPricing.length > 0) {
       try {
-        for (let i = 0; i < contractAddresses.length; i += 30) {
-          const chunk = contractAddresses.slice(i, i + 30);
+        for (let i = 0; i < validContractsForPricing.length; i += 30) {
+          const chunk = validContractsForPricing.slice(i, i + 30);
           const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(",")}`, {
             headers: { 'Accept': 'application/json' }
           }).then(r => r.json()).catch(() => null);
@@ -189,17 +200,13 @@ export async function POST(request: Request) {
       
       const meta = tokenMetadataMap[contract] || {};
       const dexInfo = dexMetaMap[contract] || { price_usd: 0, logo: null };
+      const knownStable = KNOWN_EVM_STABLES[contract];
       
       const decimals = meta.decimals !== null && meta.decimals !== undefined ? parseInt(meta.decimals) : 18;
       
-      // Hitung actual balance dari hex
-      // Note: hexbToNumber is tricky for bigints in standard JS, use BigInt
       let balanceFormatted = "0";
       try {
         const balanceBigInt = BigInt(rawBalanceHex);
-        const divisor = BigInt(10 ** decimals);
-        // Simple division for integers, we also want fractions if possible.
-        // Let's use standard Number conversion for typical balances, or custom string formatting.
         const balanceNum = Number(balanceBigInt) / (10 ** decimals);
         balanceFormatted = balanceNum.toFixed(6);
       } catch(e) {
@@ -207,7 +214,7 @@ export async function POST(request: Request) {
       }
       
       const numBalance = parseFloat(balanceFormatted);
-      const priceUsd = dexInfo.price_usd;
+      const priceUsd = knownStable ? knownStable.price_usd : dexInfo.price_usd;
       const totalValueUsd = numBalance * priceUsd;
 
       let isSpam = false;

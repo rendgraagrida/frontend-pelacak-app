@@ -6,6 +6,8 @@ import {
   LayoutGrid, ShieldCheck, Plus, X, ChevronDown, ChevronUp, 
   Loader2, Copy, Check, ExternalLink, Wallet, Trash2, ArrowUpDown, Filter, Search, AlertTriangle, Shield, Ban, RefreshCw, TrendingUp, TrendingDown, Activity, Users, Clock, Timer, History
 } from 'lucide-react';
+import TradeHistoryModal from './components/TradeHistoryModal';
+import { truncateAddress } from '@/app/lib/utils';
 
 interface WalletItem {
   id?: number;
@@ -1317,188 +1319,234 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              
-              {/* Form Tambah Tracked Coin */}
-              <div className="lg:col-span-1">
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 sticky top-24">
-                  <h3 className="text-sm font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">Add New Token</h3>
-                  <form onSubmit={handleAddTrack} className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">Contract Address</label>
-                      <input type="text" value={newTrackAddress} onChange={(e) => setNewTrackAddress(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 outline-none focus:border-blue-500 text-sm font-mono" placeholder="0x..." required />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">Chain Network</label>
-                      <select value={newTrackNetwork} onChange={(e) => setNewTrackNetwork(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 outline-none focus:border-blue-500 text-sm font-semibold">
-                        <option value="Unknown">Auto-detect (DexScreener)</option>
-                        <option value="solana">Solana</option>
-                        <option value="ethereum">Ethereum</option>
-                        <option value="bsc">BSC</option>
-                        <option value="base">Base</option>
-                        <option value="robinhood">Robinhood</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1.5">Optional Label</label>
-                      <input type="text" value={newTrackLabel} onChange={(e) => setNewTrackLabel(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 outline-none focus:border-blue-500 text-sm" placeholder="e.g. My Next 100x" />
-                    </div>
-                    <button type="submit" disabled={isTrackSubmitting} className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg shadow-sm flex justify-center items-center gap-2">
-                      {isTrackSubmitting ? <Loader2 size={16} className="animate-spin" /> : "Track Token"}
-                    </button>
-                  </form>
+            {/* Horizontal Add Token Bar */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+              <form onSubmit={handleAddTrack} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Contract Address / Mint</label>
+                  <input 
+                    type="text" 
+                    value={newTrackAddress} 
+                    onChange={(e) => setNewTrackAddress(e.target.value)} 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 outline-none focus:border-blue-500 text-xs font-mono" 
+                    placeholder="0x... atau Solana Mint" 
+                    required 
+                  />
                 </div>
-              </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Chain Network</label>
+                  <select 
+                    value={newTrackNetwork} 
+                    onChange={(e) => setNewTrackNetwork(e.target.value)} 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 outline-none focus:border-blue-500 text-xs font-semibold"
+                  >
+                    <option value="Unknown">Auto-detect (DexScreener)</option>
+                    <option value="solana">Solana</option>
+                    <option value="ethereum">Ethereum</option>
+                    <option value="bsc">BSC</option>
+                    <option value="base">Base</option>
+                    <option value="robinhood">Robinhood</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Optional Label</label>
+                  <input 
+                    type="text" 
+                    value={newTrackLabel} 
+                    onChange={(e) => setNewTrackLabel(e.target.value)} 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 outline-none focus:border-blue-500 text-xs" 
+                    placeholder="e.g. Whale Target #1" 
+                  />
+                </div>
+                <div>
+                  <button 
+                    type="submit" 
+                    disabled={isTrackSubmitting} 
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg shadow-xs flex justify-center items-center gap-1.5 text-xs transition-colors h-[38px]"
+                  >
+                    {isTrackSubmitting ? <Loader2 size={15} className="animate-spin" /> : <><Plus size={15} /> Track Token</>}
+                  </button>
+                </div>
+              </form>
+            </div>
 
-              {/* Daftar Tracked Coins */}
-              <div className="lg:col-span-3">
-                {isTrackLoading && trackedCoins.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl shadow-sm border border-slate-200">
-                    <Loader2 size={32} className="animate-spin text-blue-600 mb-4" />
-                    <p className="text-slate-500 font-medium">Fetching market data & on-chain metrics...</p>
-                  </div>
-                ) : trackedCoins.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl shadow-sm border border-slate-200 border-dashed">
-                    <div className="bg-slate-50 p-4 rounded-full mb-4"><Activity size={32} className="text-slate-400" /></div>
-                    <h3 className="text-lg font-bold text-slate-700">No tokens tracked</h3>
-                    <p className="text-slate-500 text-sm mt-1 max-w-sm text-center">Add a contract address on the left to start tracking its live price and market data.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {trackedCoins.map((coin, idx) => {
-                      const isUp = coin.price_change_h24 && coin.price_change_h24 >= 0;
-                      return (
-                        <div key={idx} className="bg-white rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow overflow-hidden group flex flex-col justify-between">
-                          <div>
-                            {/* Card Header */}
-                            <div className="p-4 border-b border-slate-100 flex items-start justify-between bg-slate-50/50">
-                              <div className="flex items-center gap-3">
-                                {coin.logo ? (
-                                  <img src={coin.logo} alt={coin.symbol} className="w-10 h-10 rounded-full bg-white shadow-sm object-cover" />
-                                ) : (
-                                  <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-lg shadow-sm">
-                                    {coin.symbol?.charAt(0) || '?'}
-                                  </div>
-                                )}
-                                <div>
-                                  <h3 className="font-bold text-slate-900 leading-tight">{coin.name} <span className="text-slate-400 font-medium ml-1">{coin.symbol}</span></h3>
-                                  <div className="flex items-center flex-wrap gap-1.5 mt-1">
-                                    <span className="text-[10px] font-bold tracking-wider uppercase bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">{coin.chain_id}</span>
-                                    {coin.label && coin.label !== coin.name && (
-                                      <span className="text-[10px] font-semibold bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded truncate max-w-[90px]" title={coin.label}>{coin.label}</span>
-                                    )}
-                                    <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                      <Users size={10} className="text-emerald-600" />
-                                      {coin.total_holders ? `${coin.total_holders.toLocaleString()} holders` : 'Holders: -'}
-                                    </span>
-                                  </div>
-                                </div>
+            {/* Wide Horizontal Tracked Coins List */}
+            <div className="w-full">
+              {isTrackLoading && trackedCoins.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl shadow-sm border border-slate-200">
+                  <Loader2 size={32} className="animate-spin text-blue-600 mb-4" />
+                  <p className="text-slate-500 font-medium text-sm">Fetching live market data & on-chain metrics...</p>
+                </div>
+              ) : trackedCoins.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl shadow-sm border border-slate-200 border-dashed">
+                  <div className="bg-slate-50 p-4 rounded-full mb-4"><Activity size={32} className="text-slate-400" /></div>
+                  <h3 className="text-lg font-bold text-slate-700">No tokens tracked</h3>
+                  <p className="text-slate-500 text-sm mt-1 max-w-md text-center">Tambahkan contract address koin pada form di atas untuk memantau harga live, likuiditas, RSI, dan riwayat transaksi.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {trackedCoins.map((coin, idx) => {
+                    const isUp = coin.price_change_h24 && coin.price_change_h24 >= 0;
+                    const rsiVal = indicators[coin.contract_address]?.rsi;
+                    const macdObj = indicators[coin.contract_address]?.macd;
+
+                    return (
+                      <div 
+                        key={idx} 
+                        className="bg-white rounded-xl shadow-xs border border-slate-200/90 hover:border-slate-300 hover:shadow-md transition-all p-4.5 overflow-hidden"
+                      >
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                          
+                          {/* 1. Token Identity */}
+                          <div className="flex items-center gap-3.5 min-w-[260px] lg:max-w-[300px]">
+                            {coin.logo ? (
+                              <img src={coin.logo} alt={coin.symbol} className="w-11 h-11 rounded-full bg-white shadow-xs object-cover border border-slate-100 shrink-0" />
+                            ) : (
+                              <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-base shadow-xs shrink-0">
+                                {coin.symbol?.charAt(0) || '?'}
                               </div>
-                              <button onClick={() => handleRemoveTrack(coin.contract_address)} className="text-slate-300 hover:text-red-500 transition-colors p-1" title="Stop Tracking">
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-
-                            {/* Card Body */}
-                            <div className="p-4">
-                              <div className="mb-4">
-                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Price</p>
-                                <div className="flex items-baseline gap-3">
-                                  <span className="text-2xl font-bold text-slate-900">
-                                    {coin.price_usd ? (coin.price_usd < 0.0001 ? `$${coin.price_usd.toFixed(8)}` : `$${coin.price_usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`) : 'N/A'}
+                            )}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <h3 className="font-bold text-slate-900 text-base leading-tight truncate" title={coin.name}>
+                                  {coin.name}
+                                </h3>
+                                <span className="text-slate-400 font-semibold text-xs shrink-0">
+                                  ({coin.symbol})
+                                </span>
+                              </div>
+                              <div className="flex items-center flex-wrap gap-1.5 mt-1">
+                                <span className="text-[10px] font-bold tracking-wider uppercase bg-slate-100 text-slate-700 border border-slate-200/60 px-1.5 py-0.5 rounded">
+                                  {coin.chain_id}
+                                </span>
+                                {coin.label && coin.label !== coin.name && (
+                                  <span className="text-[10px] font-semibold bg-blue-50 text-blue-600 border border-blue-200/60 px-1.5 py-0.5 rounded truncate max-w-[100px]" title={coin.label}>
+                                    {coin.label}
                                   </span>
-                                  {coin.price_change_h24 !== null && coin.price_change_h24 !== undefined && (
-                                    <span className={`text-sm font-bold flex items-center gap-0.5 ${isUp ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                      {isUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                                      {Math.abs(coin.price_change_h24).toFixed(2)}%
-                                    </span>
-                                  )}
-                                </div>
+                                )}
+                                <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                  <Users size={10} className="text-emerald-600" />
+                                  {coin.total_holders ? `${coin.total_holders.toLocaleString()} holders` : 'Holders: -'}
+                                </span>
                               </div>
+                              <div className="flex items-center gap-1.5 mt-1 text-[11px] font-mono text-slate-400">
+                                <span>{truncateAddress(coin.contract_address, 6, 4)}</span>
+                                <button 
+                                  onClick={() => { navigator.clipboard.writeText(coin.contract_address); setCopiedAddress(coin.contract_address); setTimeout(()=>setCopiedAddress(null), 2000); }} 
+                                  className="text-slate-400 hover:text-slate-700 transition-colors"
+                                  title="Copy contract"
+                                >
+                                  {copiedAddress === coin.contract_address ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
 
-                              <div className="grid grid-cols-2 gap-2 text-sm bg-slate-50 p-3 rounded-lg border border-slate-100 mb-3">
-                                <div>
-                                  <p className="text-[10px] text-slate-500 mb-0.5">24h Volume</p>
-                                  <p className="font-semibold text-slate-800 text-xs">{coin.volume_h24 ? `$${(coin.volume_h24 / 1000).toFixed(1)}K` : '-'}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[10px] text-slate-500 mb-0.5">Liquidity</p>
-                                  <p className="font-semibold text-slate-800 text-xs">{coin.liquidity_usd ? `$${(coin.liquidity_usd / 1000).toFixed(1)}K` : '-'}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[10px] text-slate-500 mb-0.5">Market Cap</p>
-                                  <p className="font-semibold text-slate-800 text-xs">{coin.market_cap ? `$${(coin.market_cap / 1000000).toFixed(2)}M` : '-'}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[10px] text-slate-500 mb-0.5">Active Holders</p>
-                                  <p className="font-bold text-emerald-700 text-xs flex items-center gap-1">
-                                    <Users size={11} className="text-emerald-600" />
-                                    {coin.total_holders ? coin.total_holders.toLocaleString() : '-'}
-                                  </p>
-                                </div>
+                          {/* 2. Metrics Grid (Price, Volume, Liquidity, Indicators) */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50/70 p-3 rounded-xl border border-slate-100 flex-1">
+                            {/* Price */}
+                            <div>
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Live Price</p>
+                              <div className="mt-0.5 flex items-baseline gap-1.5">
+                                <span className="text-base font-bold text-slate-900">
+                                  {coin.price_usd ? (coin.price_usd < 0.0001 ? `$${coin.price_usd.toFixed(8)}` : `$${coin.price_usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`) : 'N/A'}
+                                </span>
                               </div>
-                              
-                              {/* Technical Indicators */}
-                              <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex items-center justify-between">
-                                <div className="flex gap-4">
-                                  <div>
-                                    <p className="text-[10px] font-semibold text-slate-500 uppercase">RSI (14)</p>
-                                    {indicators[coin.contract_address]?.rsi ? (
-                                      <p className={`font-bold text-sm ${
-                                        indicators[coin.contract_address].rsi! > 70 ? 'text-rose-600' :
-                                        indicators[coin.contract_address].rsi! < 30 ? 'text-emerald-600' : 'text-slate-700'
-                                      }`}>
-                                        {indicators[coin.contract_address].rsi!.toFixed(2)}
-                                      </p>
-                                    ) : <span className="text-xs text-slate-400 animate-pulse">Loading...</span>}
-                                  </div>
-                                  <div>
-                                    <p className="text-[10px] font-semibold text-slate-500 uppercase">MACD</p>
-                                    {indicators[coin.contract_address]?.macd ? (
-                                      <p className={`font-bold text-sm ${
-                                        indicators[coin.contract_address].macd!.MACD > indicators[coin.contract_address].macd!.signal ? 'text-emerald-600' : 'text-rose-600'
-                                      }`}>
-                                        {indicators[coin.contract_address].macd!.MACD ? indicators[coin.contract_address].macd!.MACD.toFixed(4) : '-'}
-                                      </p>
-                                    ) : <span className="text-xs text-slate-400 animate-pulse">Loading...</span>}
-                                  </div>
-                                </div>
-                                {indicators[coin.contract_address] && indicators[coin.contract_address].rsi ? (
-                                  <div className={`text-[10px] px-2 py-1 rounded font-bold uppercase ${
-                                    indicators[coin.contract_address].rsi! < 30 ? 'bg-emerald-100 text-emerald-700' : 
-                                    indicators[coin.contract_address].rsi! > 70 ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-600'
+                              {coin.price_change_h24 !== null && coin.price_change_h24 !== undefined && (
+                                <span className={`text-[11px] font-bold inline-flex items-center gap-0.5 mt-0.5 ${isUp ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  {isUp ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                                  {Math.abs(coin.price_change_h24).toFixed(2)}% (24h)
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Volume & Liquidity */}
+                            <div>
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">24h Vol / Liq</p>
+                              <p className="text-xs font-bold text-slate-800 mt-1">
+                                Vol: {coin.volume_h24 ? `$${(coin.volume_h24 / 1000).toFixed(1)}K` : '-'}
+                              </p>
+                              <p className="text-[11px] font-semibold text-slate-600 mt-0.5">
+                                Liq: {coin.liquidity_usd ? `$${(coin.liquidity_usd / 1000).toFixed(1)}K` : '-'}
+                              </p>
+                            </div>
+
+                            {/* Market Cap & Holders */}
+                            <div>
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Market Cap</p>
+                              <p className="text-xs font-bold text-slate-800 mt-1">
+                                {coin.market_cap ? (coin.market_cap >= 1_000_000 ? `$${(coin.market_cap / 1_000_000).toFixed(2)}M` : `$${(coin.market_cap / 1_000).toFixed(1)}K`) : '-'}
+                              </p>
+                              <p className="text-[11px] font-semibold text-emerald-700 mt-0.5">
+                                {coin.total_holders ? `${coin.total_holders.toLocaleString()} holders` : ''}
+                              </p>
+                            </div>
+
+                            {/* Technical Indicators */}
+                            <div>
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">RSI / MACD</p>
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <span className={`text-xs font-bold ${
+                                  rsiVal ? (rsiVal > 70 ? 'text-rose-600' : rsiVal < 30 ? 'text-emerald-600' : 'text-slate-800') : 'text-slate-400'
+                                }`}>
+                                  RSI: {rsiVal ? rsiVal.toFixed(1) : '-'}
+                                </span>
+                                {rsiVal && (
+                                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-extrabold uppercase ${
+                                    rsiVal < 30 ? 'bg-emerald-100 text-emerald-700' : 
+                                    rsiVal > 70 ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-600'
                                   }`}>
-                                    {indicators[coin.contract_address].rsi! < 30 ? 'OVERSOLD' : 
-                                     indicators[coin.contract_address].rsi! > 70 ? 'OVERBOUGHT' : 'NEUTRAL'}
-                                  </div>
-                                ) : null}
+                                    {rsiVal < 30 ? 'Oversold' : rsiVal > 70 ? 'Overbought' : 'Neutral'}
+                                  </span>
+                                )}
                               </div>
+                              <p className={`text-[11px] font-semibold mt-0.5 ${
+                                macdObj ? (macdObj.MACD > macdObj.signal ? 'text-emerald-600' : 'text-rose-600') : 'text-slate-400'
+                              }`}>
+                                MACD: {macdObj?.MACD ? macdObj.MACD.toFixed(4) : '-'}
+                              </p>
                             </div>
                           </div>
 
-                          {/* Card Footer */}
-                          <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-1.5 font-mono text-slate-500" title={coin.contract_address}>
-                              <span>{coin.contract_address.slice(0, 6)}...{coin.contract_address.slice(-4)}</span>
-                              <button onClick={() => { navigator.clipboard.writeText(coin.contract_address); setCopiedAddress(coin.contract_address); setTimeout(()=>setCopiedAddress(null), 2000); }} className="hover:text-slate-800">
-                                {copiedAddress === coin.contract_address ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
-                              </button>
-                            </div>
-                            <div className="flex gap-3">
-                              <button onClick={() => handleViewHolders(coin)} className="flex items-center gap-1 font-semibold text-emerald-600 hover:text-emerald-800 transition-colors">
-                                <Users size={12} /> Top Holders
-                              </button>
-                              <a href={coin.dex_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800 transition-colors">
-                                Chart <ExternalLink size={12} />
-                              </a>
-                            </div>
+                          {/* 3. Spacious Action Buttons Bar */}
+                          <div className="flex items-center flex-wrap sm:flex-nowrap gap-2 self-start lg:self-center shrink-0">
+                            <TradeHistoryModal coin={coin} />
+                            
+                            <button 
+                              onClick={() => handleViewHolders(coin)} 
+                              className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-emerald-200/60 shadow-2xs"
+                              title="Lihat Top Holders On-chain"
+                            >
+                              <Users size={13} className="text-emerald-600" />
+                              <span>Top Holders</span>
+                            </button>
+
+                            <a 
+                              href={coin.dex_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-blue-200/60 shadow-2xs"
+                              title="Buka Chart DexScreener"
+                            >
+                              <span>Live Chart</span>
+                              <ExternalLink size={12} />
+                            </a>
+
+                            <button 
+                              onClick={() => handleRemoveTrack(coin.contract_address)} 
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100 ml-1" 
+                              title="Hapus Koin dari Track list"
+                            >
+                              <Trash2 size={15} />
+                            </button>
                           </div>
+
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}

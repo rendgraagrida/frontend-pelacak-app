@@ -127,14 +127,19 @@ export async function POST(request: Request) {
     const onChainMetaMap: Record<string, { name: string; symbol: string; uri: string }> = {};
     if (mintAddresses.length > 0) {
       try {
-        const pdas = mintAddresses.map((mint: string) => getMetadataPDA(mint)).filter((p): p is PublicKey => p !== null);
-        const accountInfos = await connection.getMultipleAccountsInfo(pdas);
+        const pdas = mintAddresses.map((mint: string) => getMetadataPDA(mint));
+        const validPdas = pdas.filter((p): p is PublicKey => p !== null);
+        const accountInfos = await connection.getMultipleAccountsInfo(validPdas);
+        
+        let validIdx = 0;
         mintAddresses.forEach((mint: string, idx: number) => {
-          const acc = accountInfos[idx];
-          if (acc && acc.data) {
-            const decoded = decodeMetaplex(acc.data);
-            if (decoded && (decoded.name || decoded.symbol)) {
-              onChainMetaMap[mint] = decoded;
+          if (pdas[idx] !== null) {
+            const acc = accountInfos[validIdx++];
+            if (acc && acc.data) {
+              const decoded = decodeMetaplex(acc.data);
+              if (decoded && (decoded.name || decoded.symbol)) {
+                onChainMetaMap[mint] = decoded;
+              }
             }
           }
         });
@@ -143,11 +148,37 @@ export async function POST(request: Request) {
       }
     }
 
-    // 5. AMBIL HARGA LIVE USD & LOGO DARI DEXSCREENER (Chunking up to 180 tokens)
+    // 5. TOKENS KHUSUS DENGAN HARGA PASTI (Mencegah DexScreener mengembalikan 30 pair WSOL dan mengabaikan token lain)
+    const KNOWN_SOL_TOKENS: Record<string, { name: string; symbol: string; getPrice: (sp: number) => number; logo: string | null }> = {
+      'So11111111111111111111111111111111111111112': {
+        name: 'Wrapped SOL',
+        symbol: 'WSOL',
+        getPrice: (sp: number) => sp,
+        logo: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png'
+      },
+      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v': {
+        name: 'USD Coin',
+        symbol: 'USDC',
+        getPrice: () => 1.00,
+        logo: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png'
+      },
+      'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB': {
+        name: 'Tether USD',
+        symbol: 'USDT',
+        getPrice: () => 1.00,
+        logo: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB/logo.png'
+      }
+    };
+    const KNOWN_MINTS_SET = new Set(Object.keys(KNOWN_SOL_TOKENS).map(k => k.toLowerCase()));
+
+    // 6. AMBIL HARGA LIVE USD & LOGO DARI DEXSCREENER (Chunking up to 180 tokens)
     const dexMetaMap: Record<string, { name: string; symbol: string; price_usd: number; logo: string | null }> = {};
     
-    // Filter out blacklisted tokens from being sent to DexScreener to save quota
-    const validMintsForPricing = mintAddresses.filter(mint => !BLACKLISTED_TOKENS.includes(mint.toLowerCase()));
+    // Jangan kirim WSOL/USDC/USDT atau Blacklisted token ke DexScreener multi-token query
+    const validMintsForPricing = mintAddresses.filter(mint => {
+      const lower = mint.toLowerCase();
+      return !BLACKLISTED_TOKENS.includes(lower) && !KNOWN_MINTS_SET.has(lower);
+    });
     
     if (validMintsForPricing.length > 0) {
       try {
@@ -184,19 +215,20 @@ export async function POST(request: Request) {
       }
     }
 
-    // 6. GABUNGKAN & STANDARISASI SELURUH DATA SPL TOKEN
+    // 7. GABUNGKAN & STANDARISASI SELURUH DATA SPL TOKEN
     const formattedSplTokens = rawSplTokens.map((t: any) => {
       const onChain = onChainMetaMap[t.mint] || {};
       const dex = dexMetaMap[t.mint] || { price_usd: 0, logo: null };
+      const known = KNOWN_SOL_TOKENS[t.mint];
       const mintLower = t.mint.toLowerCase();
       const isVip = VIP_TOKENS.includes(mintLower);
       const isBlacklisted = BLACKLISTED_TOKENS.includes(mintLower);
 
-      // Prioritas Metadata: DexScreener -> On-chain Metaplex -> Fallback
-      let tokenName = dex.name || onChain.name || `SPL Token`;
-      let tokenSymbol = dex.symbol || onChain.symbol || `${t.mint.slice(0, 4)}...${t.mint.slice(-4)}`;
-      let tokenLogo = dex.logo || null;
-      let price = dex.price_usd || 0;
+      // Prioritas Metadata: Known Config -> DexScreener -> On-chain Metaplex -> Fallback
+      let tokenName = known?.name || dex.name || onChain.name || `SPL Token`;
+      let tokenSymbol = known?.symbol || dex.symbol || onChain.symbol || `${t.mint.slice(0, 4)}...${t.mint.slice(-4)}`;
+      let tokenLogo = known?.logo || dex.logo || null;
+      let price = known ? known.getPrice(solPriceUsd) : (dex.price_usd || 0);
       let totalValue = t.amount * price;
 
       // Hardcoded metadata untuk koin populer Solana jika belum terindex DEX
