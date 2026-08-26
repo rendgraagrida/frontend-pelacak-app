@@ -207,7 +207,8 @@ export default function Dashboard() {
       const fetchAllIndicators = async () => {
         for (const coin of coins) {
           try {
-            const res = await axios.get(`/api/indicators?contract_address=${coin.contract_address}&chain_network=${coin.chain_network}`);
+            const effectiveChain = coin.chain_id || coin.chain_network || 'eth';
+            const res = await axios.get(`/api/indicators?contract_address=${coin.contract_address}&chain_network=${effectiveChain}`);
             setIndicators(prev => ({
               ...prev,
               [coin.contract_address]: res.data
@@ -1643,25 +1644,15 @@ export default function Dashboard() {
                             {/* Technical Indicators */}
                             <div>
                               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">RSI / MACD</p>
-                              <div className="flex items-center gap-1.5 mt-1">
-                                <span className={`text-xs font-bold ${
-                                  rsiVal ? (rsiVal > 70 ? 'text-rose-600' : rsiVal < 30 ? 'text-emerald-600' : 'text-slate-800') : 'text-slate-400'
-                                }`}>
-                                  RSI: {rsiVal ? rsiVal.toFixed(1) : '-'}
+                              <p className="text-xs font-bold text-slate-800 mt-1 font-mono">
+                                RSI: <span className={rsiVal ? (rsiVal > 70 ? 'text-rose-600 font-bold' : rsiVal < 30 ? 'text-emerald-600 font-bold' : 'text-slate-900') : 'text-slate-400 font-normal'}>
+                                  {rsiVal ? rsiVal.toFixed(1) : '—'}
                                 </span>
-                                {rsiVal && (
-                                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-extrabold uppercase ${
-                                    rsiVal < 30 ? 'bg-emerald-100 text-emerald-700' : 
-                                    rsiVal > 70 ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-600'
-                                  }`}>
-                                    {rsiVal < 30 ? 'Oversold' : rsiVal > 70 ? 'Overbought' : 'Neutral'}
-                                  </span>
-                                )}
-                              </div>
-                              <p className={`text-[11px] font-semibold mt-0.5 ${
-                                macdObj ? (macdObj.MACD > macdObj.signal ? 'text-emerald-600' : 'text-rose-600') : 'text-slate-400'
-                              }`}>
-                                MACD: {macdObj?.MACD ? macdObj.MACD.toFixed(4) : '-'}
+                              </p>
+                              <p className="text-[11px] font-semibold text-slate-600 mt-0.5 font-mono">
+                                MACD: <span className={macdObj?.MACD !== undefined && macdObj?.MACD !== null ? (macdObj.MACD > (macdObj.signal || 0) ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold') : 'text-slate-400 font-normal'}>
+                                  {macdObj?.MACD !== undefined && macdObj?.MACD !== null ? macdObj.MACD.toFixed(4) : '—'}
+                                </span>
                               </p>
                             </div>
                           </div>

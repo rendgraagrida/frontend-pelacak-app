@@ -3,15 +3,29 @@ import { RSI, MACD } from 'technicalindicators';
 
 const NETWORK_MAP: Record<string, string> = {
   'ethereum': 'eth',
+  'eth': 'eth',
   'bsc': 'bsc',
+  'bnb': 'bsc',
+  'binance': 'bsc',
   'base chain': 'base',
   'base': 'base',
   'robinhood': 'robinhood',
   'rh': 'robinhood',
   'solana': 'solana',
+  'sol': 'solana',
   'arbitrum': 'arbitrum',
-  'polygon': 'polygon_pos'
+  'arbitrum_one': 'arbitrum',
+  'polygon': 'polygon_pos',
+  'polygon_pos': 'polygon_pos',
+  'matic': 'polygon_pos',
+  'avalanche': 'avax',
+  'avax': 'avax',
+  'optimism': 'optimism',
 };
+
+// In-memory cache for indicators (TTL: 5 minutes) to protect against 429 rate limits
+const cache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -22,41 +36,70 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
   }
 
-  const networkSlug = NETWORK_MAP[chain_network.toLowerCase()] || 'eth';
+  const cleanChain = chain_network.trim().toLowerCase();
+  const networkSlug = NETWORK_MAP[cleanChain] || (cleanChain.includes('sol') ? 'solana' : cleanChain.includes('bsc') ? 'bsc' : cleanChain.includes('robin') || cleanChain.includes('rh') ? 'robinhood' : cleanChain.includes('base') ? 'base' : 'eth');
   const cleanAddress = contract_address.trim().toLowerCase(); 
-  const addr = chain_network.toLowerCase() === 'solana' ? contract_address.trim() : cleanAddress;
+  const addr = networkSlug === 'solana' ? contract_address.trim() : cleanAddress;
+
+  const cacheKey = `${networkSlug}:${addr}`;
+  const cached = cache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return NextResponse.json(cached.data);
+  }
 
   try {
     // 1. Fetch Top Pool for the Token
     const poolRes = await fetch(`https://api.geckoterminal.com/api/v2/networks/${networkSlug}/tokens/${addr}/pools?page=1`, {
-      next: { revalidate: 300 } // Cache for 5 minutes
+      headers: { 'Accept': 'application/json' },
+      next: { revalidate: 300 }
     });
+
     if (!poolRes.ok) {
-      return NextResponse.json({ rsi: null, macd: null, error: 'Failed to fetch pools (GeckoTerminal)' }, { status: 200 });
+      const fallbackResult = { rsi: null, macd: null, error: 'Pool query failed or rate limited' };
+      return NextResponse.json(fallbackResult, { status: 200 });
     }
     
     const poolJson = await poolRes.json();
     const pools = poolJson.data;
 
     if (!pools || pools.length === 0) {
-      return NextResponse.json({ rsi: null, macd: null, error: 'No pools found for this token' }, { status: 200 });
+      const fallbackResult = { rsi: null, macd: null, error: 'No pools found for this token on DEX' };
+      cache.set(cacheKey, { data: fallbackResult, timestamp: Date.now() });
+      return NextResponse.json(fallbackResult, { status: 200 });
     }
 
     const topPoolAddress = pools[0].attributes.address;
 
-    // 2. Fetch OHLCV data (Hourly)
-    const ohlcvRes = await fetch(`https://api.geckoterminal.com/api/v2/networks/${networkSlug}/pools/${topPoolAddress}/ohlcv/hour?limit=100`, {
-      next: { revalidate: 300 } // Cache for 5 minutes
-    });
-    if (!ohlcvRes.ok) {
-      return NextResponse.json({ rsi: null, macd: null, error: 'Failed to fetch OHLCV (GeckoTerminal)' }, { status: 200 });
+    // 2. Fetch OHLCV data with fallback timeframes (hour -> minute -> day)
+    let ohlcvList: number[][] = [];
+    const timeframes = ['hour', 'minute', 'day'];
+
+    for (const tf of timeframes) {
+      try {
+        const ohlcvRes = await fetch(`https://api.geckoterminal.com/api/v2/networks/${networkSlug}/pools/${topPoolAddress}/ohlcv/${tf}?limit=100`, {
+          headers: { 'Accept': 'application/json' },
+          next: { revalidate: 300 }
+        });
+
+        if (ohlcvRes.ok) {
+          const ohlcvJson = await ohlcvRes.json();
+          const list = ohlcvJson.data?.attributes?.ohlcv_list;
+          if (Array.isArray(list) && list.length >= 14) {
+            ohlcvList = list;
+            break;
+          } else if (Array.isArray(list) && list.length > ohlcvList.length) {
+            ohlcvList = list;
+          }
+        }
+      } catch {
+        // continue to next timeframe
+      }
     }
 
-    const ohlcvJson = await ohlcvRes.json();
-    const ohlcvList = ohlcvJson.data?.attributes?.ohlcv_list; // [timestamp, open, high, low, close, volume][]
-
     if (!ohlcvList || ohlcvList.length === 0) {
-      return NextResponse.json({ rsi: null, macd: null, error: 'No OHLCV data available' }, { status: 200 });
+      const fallbackResult = { rsi: null, macd: null, pool: topPoolAddress, error: 'Insufficient candle data' };
+      cache.set(cacheKey, { data: fallbackResult, timestamp: Date.now() });
+      return NextResponse.json(fallbackResult, { status: 200 });
     }
 
     // GeckoTerminal OHLCV is returned newest to oldest. We need oldest to newest.
@@ -64,30 +107,39 @@ export async function GET(request: Request) {
     const closes = reversedList.map((candle: number[]) => candle[4]);
 
     // 3. Calculate Technical Indicators
-    const rsiInput = { values: closes, period: 14 };
-    const rsiResult = RSI.calculate(rsiInput);
+    let latestRSI: number | null = null;
+    if (closes.length >= 14) {
+      const rsiInput = { values: closes, period: 14 };
+      const rsiResult = RSI.calculate(rsiInput);
+      latestRSI = rsiResult.length > 0 ? rsiResult[rsiResult.length - 1] : null;
+    }
 
-    const macdInput = {
-      values: closes,
-      fastPeriod: 12,
-      slowPeriod: 26,
-      signalPeriod: 9,
-      SimpleMAOscillator: false,
-      SimpleMASignal: false
-    };
-    const macdResult = MACD.calculate(macdInput);
+    let latestMACD: any = null;
+    if (closes.length >= 26) {
+      const macdInput = {
+        values: closes,
+        fastPeriod: 12,
+        slowPeriod: 26,
+        signalPeriod: 9,
+        SimpleMAOscillator: false,
+        SimpleMASignal: false
+      };
+      const macdResult = MACD.calculate(macdInput);
+      latestMACD = macdResult.length > 0 ? macdResult[macdResult.length - 1] : null;
+    }
 
-    const latestRSI = rsiResult.length > 0 ? rsiResult[rsiResult.length - 1] : null;
-    const latestMACD = macdResult.length > 0 ? macdResult[macdResult.length - 1] : null;
-
-    return NextResponse.json({
+    const result = {
       rsi: latestRSI,
       macd: latestMACD,
       pool: topPoolAddress
-    });
+    };
+
+    cache.set(cacheKey, { data: result, timestamp: Date.now() });
+    return NextResponse.json(result);
 
   } catch (error: any) {
     console.error('Error fetching indicators:', error);
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
 }
+
