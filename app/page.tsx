@@ -997,11 +997,11 @@ export default function Dashboard() {
             </div>
 
             {/* Navigation Tabs & Connect Button */}
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/80">
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              <div className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/80 overflow-x-auto">
                 <button 
                   onClick={() => handleTabChange('my_wallet')} 
-                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                  className={`px-2.5 sm:px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                     activeTab === 'my_wallet' ? 'bg-white text-emerald-700 shadow-xs border border-emerald-100/60' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -1011,7 +1011,7 @@ export default function Dashboard() {
                 
                 <button 
                   onClick={() => handleTabChange('watchlist')} 
-                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                  className={`px-2.5 sm:px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                     activeTab === 'watchlist' ? 'bg-white text-blue-700 shadow-xs border border-blue-100/60' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -1021,7 +1021,7 @@ export default function Dashboard() {
                 
                 <button 
                   onClick={() => handleTabChange('track')} 
-                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                  className={`px-2.5 sm:px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                     activeTab === 'track' ? 'bg-white text-indigo-700 shadow-xs border border-indigo-100/60' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -1031,7 +1031,7 @@ export default function Dashboard() {
                 
                 <button 
                   onClick={() => handleTabChange('blacklist')} 
-                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                  className={`px-2.5 sm:px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                     activeTab === 'blacklist' ? 'bg-white text-rose-700 shadow-xs border border-rose-100/60' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -1248,11 +1248,11 @@ export default function Dashboard() {
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                           
                           {/* 1. Wallet Identity */}
-                          <div className="flex items-center gap-3.5 min-w-[260px] lg:max-w-[320px]">
+                          <div className="flex items-center gap-3.5 min-w-[220px] lg:max-w-[260px] shrink-0">
                             <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-base shadow-xs shrink-0 border border-blue-200/60">
                               <Wallet size={18} />
                             </div>
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5">
                                 {editingWalletKey === memoryKey ? (
                                   <div className="flex items-center gap-1.5 py-0.5">
@@ -1266,7 +1266,7 @@ export default function Dashboard() {
                                       }}
                                       autoFocus
                                       placeholder="Target name..."
-                                      className="text-xs font-bold text-slate-900 bg-white border border-blue-400 rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs w-36"
+                                      className="text-xs font-bold text-slate-900 bg-white border border-blue-400 rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs w-32"
                                     />
                                     <button
                                       onClick={() => handleSaveLabel(wallet.wallet_address, wallet.chain_network)}
@@ -1286,13 +1286,13 @@ export default function Dashboard() {
                                     </button>
                                   </div>
                                 ) : (
-                                  <div className="flex items-center gap-1.5 group/label">
-                                    <h3 className="font-bold text-slate-900 text-base leading-tight truncate max-w-[190px]" title={wallet.label || wallet.wallet_address}>
+                                  <div className="flex items-center gap-1.5 group/label min-w-0">
+                                    <h3 className="font-bold text-slate-900 text-base leading-tight truncate" title={wallet.label || wallet.wallet_address}>
                                       {wallet.label || 'Unknown Target'}
                                     </h3>
                                     <button
                                       onClick={() => startEditingLabel(wallet)}
-                                      className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                      className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors shrink-0"
                                       title="Edit target label"
                                     >
                                       <Pencil size={12} />
@@ -1306,10 +1306,10 @@ export default function Dashboard() {
                                 </span>
                               </div>
                               <div className="flex items-center gap-1.5 mt-1 text-[11px] font-mono text-slate-400">
-                                <span>{truncateAddress(wallet.wallet_address, 8, 6)}</span>
+                                <span className="truncate">{truncateAddress(wallet.wallet_address, 8, 6)}</span>
                                 <button 
                                   onClick={() => handleCopy(wallet.wallet_address)} 
-                                  className="text-slate-400 hover:text-slate-700 transition-colors"
+                                  className="text-slate-400 hover:text-slate-700 transition-colors shrink-0"
                                   title="Copy wallet address"
                                 >
                                   {copiedAddress === wallet.wallet_address ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
@@ -1319,42 +1319,42 @@ export default function Dashboard() {
                           </div>
 
                           {/* 2. Metrics Grid (Valid Net Worth, Holdings, Spam Quarantine) */}
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50/70 p-3 rounded-xl border border-slate-100 flex-1">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 bg-slate-50/70 p-3 rounded-xl border border-slate-100 flex-1 min-w-0 sm:divide-x sm:divide-slate-200/60">
                             {/* Net Worth */}
-                            <div>
-                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Valid Net Worth</p>
-                              <div className="mt-0.5 flex items-baseline gap-1.5">
+                            <div className="min-w-0 overflow-hidden sm:pr-2">
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">Valid Net Worth</p>
+                              <div className="mt-0.5 flex items-baseline gap-1.5 min-w-0">
                                 {isLoadingToken && netWorth === null ? (
                                   <span className="text-xs font-semibold text-blue-600 flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Syncing...</span>
                                 ) : netWorth !== null ? (
-                                  <span className="text-base font-bold text-blue-600">{formatCurrency(netWorth)}</span>
+                                  <span className="text-sm sm:text-base font-bold text-blue-600 truncate">{formatCurrency(netWorth)}</span>
                                 ) : (
                                   <span className="text-xs text-slate-400 italic">Unscanned</span>
                                 )}
                               </div>
-                              <p className="text-[11px] text-slate-500 mt-0.5">Verified Holdings</p>
+                              <p className="text-[11px] text-slate-500 mt-0.5 truncate">Verified Holdings</p>
                             </div>
 
                             {/* Detected Assets */}
-                            <div>
-                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Holdings</p>
-                              <p className="text-xs font-bold text-slate-800 mt-1">
+                            <div className="min-w-0 overflow-hidden sm:px-3">
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">Holdings</p>
+                              <p className="text-xs font-bold text-slate-800 mt-1 truncate">
                                 {validTokens.length} active assets
                               </p>
-                              <p className="text-[11px] text-slate-500 mt-0.5">On-chain Tokens</p>
+                              <p className="text-[11px] text-slate-500 mt-0.5 truncate">On-chain Tokens</p>
                             </div>
 
                             {/* Spam Quarantine */}
-                            <div>
-                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Spam Quarantine</p>
-                              <p className="text-xs font-bold text-slate-800 mt-1">
+                            <div className="min-w-0 overflow-hidden sm:pl-3">
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">Spam Quarantine</p>
+                              <p className="text-xs font-bold text-slate-800 mt-1 truncate">
                                 {spamTokens.length > 0 ? (
                                   <span className="text-rose-600 font-bold">{spamTokens.length} blocked</span>
                                 ) : (
                                   <span className="text-slate-600">0 spam</span>
                                 )}
                               </p>
-                              <p className="text-[11px] text-slate-500 mt-0.5">Auto-isolated</p>
+                              <p className="text-[11px] text-slate-500 mt-0.5 truncate">Auto-isolated</p>
                             </div>
                           </div>
 
@@ -1771,8 +1771,8 @@ export default function Dashboard() {
                       >
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                           
-                          {/* 1. Token Identity (Green holder badge removed) */}
-                          <div className="flex items-center gap-3.5 min-w-[260px] lg:max-w-[300px]">
+                          {/* 1. Token Identity */}
+                          <div className="flex items-center gap-3.5 min-w-[220px] lg:max-w-[260px] shrink-0">
                             {coin.logo ? (
                               <img src={coin.logo} alt={coin.symbol} className="w-11 h-11 rounded-full bg-white shadow-xs object-cover border border-slate-100 shrink-0" />
                             ) : (
@@ -1780,8 +1780,8 @@ export default function Dashboard() {
                                 {coin.symbol?.charAt(0) || '?'}
                               </div>
                             )}
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 min-w-0">
                                 <h3 className="font-bold text-slate-900 text-base leading-tight truncate" title={coin.name}>
                                   {coin.name}
                                 </h3>
@@ -1800,10 +1800,10 @@ export default function Dashboard() {
                                 )}
                               </div>
                               <div className="flex items-center gap-1.5 mt-1 text-[11px] font-mono text-slate-400">
-                                <span>{truncateAddress(coin.contract_address, 6, 4)}</span>
+                                <span className="truncate">{truncateAddress(coin.contract_address, 6, 4)}</span>
                                 <button 
                                   onClick={() => { navigator.clipboard.writeText(coin.contract_address); setCopiedAddress(coin.contract_address); setTimeout(()=>setCopiedAddress(null), 2000); }} 
-                                  className="text-slate-400 hover:text-slate-700 transition-colors"
+                                  className="text-slate-400 hover:text-slate-700 transition-colors shrink-0"
                                   title="Copy contract"
                                 >
                                   {copiedAddress === coin.contract_address ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
@@ -1813,54 +1813,56 @@ export default function Dashboard() {
                           </div>
 
                           {/* 2. Metrics Grid (Price, Volume, Liquidity, Indicators) */}
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50/70 p-3 rounded-xl border border-slate-100 flex-1">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 bg-slate-50/70 p-3 rounded-xl border border-slate-100 flex-1 min-w-0 sm:divide-x sm:divide-slate-200/60">
                             {/* Price */}
-                            <div>
-                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Live Price</p>
-                              <div className="mt-0.5 flex items-baseline gap-1.5">
-                                <span className="text-base font-bold text-slate-900">
+                            <div className="min-w-0 overflow-hidden sm:pr-2">
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">Live Price</p>
+                              <div className="mt-0.5 flex items-baseline gap-1.5 min-w-0">
+                                <span className="text-xs sm:text-sm font-bold text-slate-900 truncate">
                                   {coin.price_usd ? (coin.price_usd < 0.0001 ? `$${coin.price_usd.toFixed(8)}` : `$${coin.price_usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`) : 'N/A'}
                                 </span>
                               </div>
-                              {coin.price_change_h24 !== null && coin.price_change_h24 !== undefined && (
-                                <span className={`text-[11px] font-bold inline-flex items-center gap-0.5 mt-0.5 ${isUp ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                  {isUp ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-                                  {Math.abs(coin.price_change_h24).toFixed(2)}% (24h)
+                              {coin.price_change_h24 !== null && coin.price_change_h24 !== undefined ? (
+                                <span className={`text-[10px] sm:text-[11px] font-bold inline-flex items-center gap-0.5 mt-0.5 truncate ${isUp ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  {isUp ? <TrendingUp size={11} className="shrink-0" /> : <TrendingDown size={11} className="shrink-0" />}
+                                  <span className="truncate">{Math.abs(coin.price_change_h24).toFixed(2)}% (24h)</span>
                                 </span>
+                              ) : (
+                                <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 truncate">DexScreener</p>
                               )}
                             </div>
 
                             {/* Volume & Liquidity */}
-                            <div>
-                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">24h Vol / Liq</p>
-                              <p className="text-xs font-bold text-slate-800 mt-1">
+                            <div className="min-w-0 overflow-hidden sm:px-3">
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">24h Vol / Liq</p>
+                              <p className="text-xs font-bold text-slate-800 mt-1 truncate">
                                 Vol: {coin.volume_h24 ? `$${(coin.volume_h24 / 1000).toFixed(1)}K` : '-'}
                               </p>
-                              <p className="text-[11px] font-semibold text-slate-600 mt-0.5">
+                              <p className="text-[10px] sm:text-[11px] font-semibold text-slate-600 mt-0.5 truncate">
                                 Liq: {coin.liquidity_usd ? `$${(coin.liquidity_usd / 1000).toFixed(1)}K` : '-'}
                               </p>
                             </div>
 
                             {/* Market Cap & Holders */}
-                            <div>
-                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Market Cap</p>
-                              <p className="text-xs font-bold text-slate-800 mt-1">
+                            <div className="min-w-0 overflow-hidden sm:px-3">
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">Market Cap</p>
+                              <p className="text-xs font-bold text-slate-800 mt-1 truncate">
                                 {coin.market_cap ? (coin.market_cap >= 1_000_000 ? `$${(coin.market_cap / 1_000_000).toFixed(2)}M` : `$${(coin.market_cap / 1_000).toFixed(1)}K`) : '-'}
                               </p>
-                              <p className="text-[11px] font-semibold text-emerald-700 mt-0.5">
-                                {coin.total_holders ? `${coin.total_holders.toLocaleString()} holders` : ''}
+                              <p className="text-[10px] sm:text-[11px] font-semibold text-emerald-700 mt-0.5 truncate">
+                                {coin.total_holders ? `${coin.total_holders.toLocaleString()} holders` : 'Market Cap'}
                               </p>
                             </div>
 
                             {/* Technical Indicators */}
-                            <div>
-                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">RSI / MACD</p>
-                              <p className="text-xs font-bold text-slate-800 mt-1 font-mono">
+                            <div className="min-w-0 overflow-hidden sm:pl-3">
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">RSI / MACD</p>
+                              <p className="text-xs font-bold text-slate-800 mt-1 font-mono truncate">
                                 RSI: <span className={rsiVal ? (rsiVal > 70 ? 'text-rose-600 font-bold' : rsiVal < 30 ? 'text-emerald-600 font-bold' : 'text-slate-900') : 'text-slate-400 font-normal'}>
                                   {rsiVal ? rsiVal.toFixed(1) : '—'}
                                 </span>
                               </p>
-                              <p className="text-[11px] font-semibold text-slate-600 mt-0.5 font-mono">
+                              <p className="text-[10px] sm:text-[11px] font-semibold text-slate-600 mt-0.5 font-mono truncate">
                                 MACD: <span className={macdObj?.MACD !== undefined && macdObj?.MACD !== null ? (macdObj.MACD > (macdObj.signal || 0) ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold') : 'text-slate-400 font-normal'}>
                                   {macdObj?.MACD !== undefined && macdObj?.MACD !== null ? macdObj.MACD.toFixed(4) : '—'}
                                 </span>
@@ -2016,12 +2018,12 @@ export default function Dashboard() {
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                         
                         {/* 1. Identity */}
-                        <div className="flex items-center gap-3.5 min-w-[260px] lg:max-w-[320px]">
+                        <div className="flex items-center gap-3.5 min-w-[220px] lg:max-w-[260px] shrink-0">
                           <div className="w-11 h-11 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-base shadow-xs shrink-0 border border-rose-200/60">
                             <Ban size={18} />
                           </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 min-w-0">
                               <h3 className="font-bold text-slate-900 text-base leading-tight truncate" title={item.label || item.contract_address}>
                                 {item.label || <span className="text-slate-400 italic font-normal">Untitled Token</span>}
                               </h3>
@@ -2031,14 +2033,14 @@ export default function Dashboard() {
                                 {item.chain_network || 'Any Network'}
                               </span>
                               <span className="text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-200/60 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                ⛔ Spam Quarantine
+                                ⛔ Quarantine
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5 mt-1 text-[11px] font-mono text-slate-400">
-                              <span>{truncateAddress(item.contract_address, 8, 6)}</span>
+                              <span className="truncate">{truncateAddress(item.contract_address, 8, 6)}</span>
                               <button 
                                 onClick={() => handleCopy(item.contract_address)} 
-                                className="text-slate-400 hover:text-slate-700 transition-colors"
+                                className="text-slate-400 hover:text-slate-700 transition-colors shrink-0"
                                 title="Copy contract"
                               >
                                 {copiedAddress === item.contract_address ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
@@ -2048,26 +2050,26 @@ export default function Dashboard() {
                         </div>
 
                         {/* 2. Security Status Metrics Grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-rose-50/40 p-3 rounded-xl border border-rose-100 flex-1">
-                          <div>
-                            <p className="text-[10px] font-semibold text-rose-700 uppercase tracking-wide">Quarantine Status</p>
-                            <p className="text-xs font-bold text-rose-800 mt-1 flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
-                              Active (0x0 Value)
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 bg-rose-50/40 p-3 rounded-xl border border-rose-100 flex-1 min-w-0 sm:divide-x sm:divide-rose-200/60">
+                          <div className="min-w-0 overflow-hidden sm:pr-2">
+                            <p className="text-[10px] font-semibold text-rose-700 uppercase tracking-wide truncate">Quarantine Status</p>
+                            <p className="text-xs font-bold text-rose-800 mt-1 flex items-center gap-1 truncate">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-600 shrink-0"></span>
+                              <span className="truncate">Active (0x0 Value)</span>
                             </p>
-                            <p className="text-[11px] text-slate-500 mt-0.5">Excluded from Net Worth</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5 truncate">Excluded from Net Worth</p>
                           </div>
 
-                          <div>
-                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Network Scope</p>
-                            <p className="text-xs font-bold text-slate-800 mt-1">{item.chain_network || 'Omnichain / Auto'}</p>
-                            <p className="text-[11px] text-slate-500 mt-0.5">Auto-intercepted</p>
+                          <div className="min-w-0 overflow-hidden sm:px-3">
+                            <p className="text-[10px] font-semibold text-rose-700 uppercase tracking-wide truncate">Network Scope</p>
+                            <p className="text-xs font-bold text-slate-800 mt-1 truncate">{item.chain_network || 'Omnichain / Auto'}</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5 truncate">Auto-intercepted</p>
                           </div>
 
-                          <div>
-                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Filter Policy</p>
-                            <p className="text-xs font-bold text-slate-800 mt-1">Force Marked Spam</p>
-                            <p className="text-[11px] text-slate-500 mt-0.5">Hidden from Portfolio</p>
+                          <div className="min-w-0 overflow-hidden sm:pl-3">
+                            <p className="text-[10px] font-semibold text-rose-700 uppercase tracking-wide truncate">Filter Policy</p>
+                            <p className="text-xs font-bold text-slate-800 mt-1 truncate">Force Marked Spam</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5 truncate">Hidden from Portfolio</p>
                           </div>
                         </div>
 
@@ -2253,7 +2255,7 @@ export default function Dashboard() {
                           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                             
                             {/* 1. Coin / Asset Identity */}
-                            <div className="flex items-center gap-3.5 min-w-[260px] lg:max-w-[300px]">
+                            <div className="flex items-center gap-3.5 min-w-[220px] lg:max-w-[260px] shrink-0">
                               <div className="w-11 h-11 rounded-full bg-slate-100 border border-slate-200/80 overflow-hidden flex items-center justify-center font-bold text-base shadow-xs shrink-0">
                                 {token.logo ? (
                                   <img src={token.logo} alt={token.symbol} className="w-full h-full object-cover" />
@@ -2261,12 +2263,12 @@ export default function Dashboard() {
                                   <div className="text-xs font-bold text-slate-700">{token.symbol?.slice(0, 2).toUpperCase()}</div>
                                 )}
                               </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1.5">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 min-w-0">
                                   <h3 className="font-bold text-slate-900 text-base leading-tight truncate" title={token.name}>
                                     {token.name}
                                   </h3>
-                                  <span className="text-xs font-bold text-slate-400 font-mono">
+                                  <span className="text-xs font-bold text-slate-400 font-mono shrink-0">
                                     {token.symbol}
                                   </span>
                                 </div>
@@ -2282,48 +2284,48 @@ export default function Dashboard() {
                                 </div>
                                 {token.contract_address !== 'NATIVE_COIN' ? (
                                   <div className="flex items-center gap-1.5 mt-1 text-[11px] font-mono text-slate-400">
-                                    <span>{truncateAddress(token.contract_address, 6, 4)}</span>
+                                    <span className="truncate">{truncateAddress(token.contract_address, 6, 4)}</span>
                                     <button 
                                       onClick={() => handleCopy(token.contract_address)}
-                                      className="text-slate-400 hover:text-slate-700 transition-colors"
+                                      className="text-slate-400 hover:text-slate-700 transition-colors shrink-0"
                                       title="Copy contract address"
                                     >
                                       {copiedAddress === token.contract_address ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
                                     </button>
                                   </div>
                                 ) : (
-                                  <div className="text-[11px] text-slate-400 mt-1 font-semibold">Native Blockchain Currency</div>
+                                  <div className="text-[11px] text-slate-400 mt-1 font-semibold truncate">Native Blockchain Currency</div>
                                 )}
                               </div>
                             </div>
 
                             {/* 2. Metrics Grid (Live Price, Balance / Holdings, Total USD Value) */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50/70 p-3 rounded-xl border border-slate-100 flex-1">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 bg-slate-50/70 p-3 rounded-xl border border-slate-100 flex-1 min-w-0 sm:divide-x sm:divide-slate-200/60">
                               {/* Live Price */}
-                              <div>
-                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Live Price</p>
-                                <p className="text-sm font-bold text-slate-900 mt-1 font-mono">
+                              <div className="min-w-0 overflow-hidden sm:pr-2">
+                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">Live Price</p>
+                                <p className="text-xs sm:text-sm font-bold text-slate-900 mt-1 font-mono truncate">
                                   {formatTokenPrice(token.price_usd).replace('@ ', '')}
                                 </p>
-                                <p className="text-[11px] text-slate-500 mt-0.5">DexScreener Index</p>
+                                <p className="text-[11px] text-slate-500 mt-0.5 truncate">DexScreener Index</p>
                               </div>
 
                               {/* Wallet Balance */}
-                              <div>
-                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Wallet Balance</p>
-                                <p className="text-sm font-bold text-slate-900 mt-1 font-mono">
+                              <div className="min-w-0 overflow-hidden sm:px-3">
+                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">Wallet Balance</p>
+                                <p className="text-xs sm:text-sm font-bold text-slate-900 mt-1 font-mono truncate">
                                   {token.balance} <span className="text-xs text-slate-500 font-sans">{token.symbol}</span>
                                 </p>
-                                <p className="text-[11px] text-slate-500 mt-0.5">Holdings Quantity</p>
+                                <p className="text-[11px] text-slate-500 mt-0.5 truncate">Holdings Quantity</p>
                               </div>
 
                               {/* Total Value USD */}
-                              <div>
-                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Total Value</p>
-                                <p className="text-base font-bold text-emerald-600 mt-0.5 font-mono">
+                              <div className="min-w-0 overflow-hidden sm:pl-3">
+                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">Total Value</p>
+                                <p className="text-sm sm:text-base font-bold text-emerald-600 mt-0.5 font-mono truncate">
                                   {formatCurrency(token.total_value_usd)}
                                 </p>
-                                <p className="text-[11px] text-slate-500 mt-0.5">USD Valuation</p>
+                                <p className="text-[11px] text-slate-500 mt-0.5 truncate">USD Valuation</p>
                               </div>
                             </div>
 
