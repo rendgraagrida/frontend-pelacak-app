@@ -25,6 +25,7 @@ interface TokenItem {
   price_usd?: number;
   total_value_usd?: number;
   is_spam?: boolean;
+  spam_reason?: 'blacklist' | 'keyword' | 'zero_value' | null;
   injected_chain?: string;
 }
 
@@ -114,7 +115,9 @@ export default function Dashboard() {
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   
   const [showSpam, setShowSpam] = useState<Record<string, boolean>>({});
+  const [showZeroValue, setShowZeroValue] = useState<Record<string, boolean>>({});
   const [showMyWalletSpam, setShowMyWalletSpam] = useState(false);
+  const [showMyWalletZeroValue, setShowMyWalletZeroValue] = useState(false);
 
   const isSyncing = useRef(false);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
@@ -311,10 +314,12 @@ export default function Dashboard() {
             return (response.data.tokens || []).map((t: any) => {
               const isNative = t.contract_address === 'NATIVE_COIN';
               const isZeroOrUnknown = !isNative && (!t.price_usd || t.price_usd <= 0 || !t.total_value_usd || t.total_value_usd <= 0);
+              const spamReason = t.spam_reason || (isZeroOrUnknown ? 'zero_value' : null);
               return { 
                 ...t, 
                 injected_chain: chain, 
-                is_spam: Boolean(t.is_spam || isZeroOrUnknown) 
+                is_spam: Boolean(t.is_spam || isZeroOrUnknown),
+                spam_reason: spamReason
               };
             });
           } catch(e) { return []; }
@@ -335,10 +340,12 @@ export default function Dashboard() {
         const newTokens = (response.data.tokens || []).map((t: any) => {
           const isNative = t.contract_address === 'NATIVE_COIN';
           const isZeroOrUnknown = !isNative && (!t.price_usd || t.price_usd <= 0 || !t.total_value_usd || t.total_value_usd <= 0);
+          const spamReason = t.spam_reason || (isZeroOrUnknown ? 'zero_value' : null);
           return { 
             ...t, 
             injected_chain: connectedNetwork, 
-            is_spam: Boolean(t.is_spam || isZeroOrUnknown) 
+            is_spam: Boolean(t.is_spam || isZeroOrUnknown),
+            spam_reason: spamReason
           };
         });
         setMyWalletTokens(newTokens);
@@ -375,9 +382,11 @@ export default function Dashboard() {
       const newTokens = rawTokens.map((t: any) => {
         const isNative = t.contract_address === 'NATIVE_COIN';
         const isZeroOrUnknown = !isNative && (!t.price_usd || t.price_usd <= 0 || !t.total_value_usd || t.total_value_usd <= 0);
+        const spamReason = t.spam_reason || (isZeroOrUnknown ? 'zero_value' : null);
         return { 
           ...t, 
-          is_spam: Boolean(t.is_spam || isZeroOrUnknown) 
+          is_spam: Boolean(t.is_spam || isZeroOrUnknown),
+          spam_reason: spamReason
         };
       });
       setWalletTokens((prev) => ({ ...prev, [memoryKey]: newTokens }));
@@ -460,9 +469,11 @@ export default function Dashboard() {
       const newTokens = rawTokens.map((t: any) => {
         const isNative = t.contract_address === 'NATIVE_COIN';
         const isZeroOrUnknown = !isNative && (!t.price_usd || t.price_usd <= 0 || !t.total_value_usd || t.total_value_usd <= 0);
+        const spamReason = t.spam_reason || (isZeroOrUnknown ? 'zero_value' : null);
         return { 
           ...t, 
-          is_spam: Boolean(t.is_spam || isZeroOrUnknown) 
+          is_spam: Boolean(t.is_spam || isZeroOrUnknown),
+          spam_reason: spamReason
         };
       });
       setWalletTokens((prev) => ({ ...prev, [memoryKey]: [...(prev[memoryKey] || []), ...newTokens] }));
@@ -1271,7 +1282,8 @@ export default function Dashboard() {
                     const isLoadingToken = loadingTokens[memoryKey];
                     const tokens = walletTokens[memoryKey] || [];
                     const validTokens = tokens.filter(t => !t.is_spam);
-                    const spamTokens = tokens.filter(t => t.is_spam);
+                    const zeroValueTokens = tokens.filter(t => t.is_spam && t.spam_reason === 'zero_value');
+                    const spamTokens = tokens.filter(t => t.is_spam && t.spam_reason !== 'zero_value');
                     const netWorth = getNetWorth(wallet.wallet_address, wallet.chain_network);
 
                     return (
@@ -1378,14 +1390,17 @@ export default function Dashboard() {
                               <p className="text-[11px] text-slate-500 mt-0.5 truncate">On-chain Tokens</p>
                             </div>
 
-                            {/* Spam Quarantine */}
+                            {/* Spam & Zero-Value Quarantine */}
                             <div className="min-w-0 overflow-hidden sm:pl-3">
-                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">Spam Quarantine</p>
+                              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide truncate">Spam & Zero-Val</p>
                               <p className="text-xs font-bold text-slate-800 mt-1 truncate">
                                 {spamTokens.length > 0 ? (
-                                  <span className="text-rose-600 font-bold">{spamTokens.length} blocked</span>
+                                  <span className="text-rose-600 font-bold">{spamTokens.length} spam</span>
                                 ) : (
                                   <span className="text-slate-600">0 spam</span>
+                                )}
+                                {zeroValueTokens.length > 0 && (
+                                  <span className="text-amber-700 font-semibold text-[11px] ml-1.5">• {zeroValueTokens.length} zero-val</span>
                                 )}
                               </p>
                               <p className="text-[11px] text-slate-500 mt-0.5 truncate">Auto-isolated</p>
@@ -1529,42 +1544,114 @@ export default function Dashboard() {
                                 </div>
                               )}
 
-                              {/* SPAM QUARANTINE ACCORDION */}
+                              {/* 1. ZERO-VALUE / UNINDEXED ASSETS ACCORDION */}
+                              {zeroValueTokens.length > 0 && (
+                                <div className="mt-4 border border-amber-200 rounded-xl bg-amber-50/30 overflow-hidden">
+                                  <button 
+                                    onClick={() => setShowZeroValue(prev => ({ ...prev, [memoryKey]: !prev[memoryKey] }))}
+                                    className="w-full px-4 py-2.5 flex justify-between items-center bg-amber-50/80 hover:bg-amber-100/80 transition-colors cursor-pointer"
+                                  >
+                                    <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                                      <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                      Zero-Value / Unindexed Assets ({zeroValueTokens.length})
+                                    </div>
+                                    {showZeroValue[memoryKey] ? <ChevronUp size={14} className="text-amber-700"/> : <ChevronDown size={14} className="text-amber-700"/>}
+                                  </button>
+                                  
+                                  {showZeroValue[memoryKey] && (
+                                    <div className="p-3.5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 border-t border-amber-100 bg-amber-50/20">
+                                      {zeroValueTokens.map((token, tIdx) => (
+                                        <div key={`zv-${tIdx}`} className="bg-white p-2.5 rounded-lg border border-amber-200/60 shadow-2xs flex flex-col justify-between">
+                                          <div>
+                                            <div className="flex justify-between items-start mb-1.5">
+                                              <div className="min-w-0 flex-1 mr-2">
+                                                <h5 className="text-[11px] font-bold text-slate-800 flex items-center gap-1 truncate" title={token.name || token.symbol}>
+                                                  <a
+                                                    href={getDexScreenerUrl(wallet.chain_network, token.contract_address)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="hover:text-blue-600 hover:underline flex items-center gap-1 truncate"
+                                                    title="Inspect chart on DexScreener"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                  >
+                                                    <span className="truncate">{token.name || token.symbol}</span>
+                                                    <ExternalLink size={9} className="text-slate-400 shrink-0" />
+                                                  </a>
+                                                </h5>
+                                                <span className="text-[9px] font-mono text-slate-400 mt-0.5 block">{truncateAddress(token.contract_address, 6, 4)}</span>
+                                              </div>
+                                              <div className="text-right shrink-0">
+                                                <span className="bg-amber-100 text-amber-800 border border-amber-200/80 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                                                  {formatCurrency(token.total_value_usd)}
+                                                </span>
+                                              </div>
+                                            </div>
+                                            <div className="flex justify-between items-center text-[10px] text-slate-500 border-t border-slate-100 pt-1.5 mt-1">
+                                              <span>Qty: {token.balance} {token.symbol}</span>
+                                              <span className="text-amber-700 font-medium">Unindexed Price</span>
+                                            </div>
+                                          </div>
+                                          {token.contract_address !== 'NATIVE_COIN' && (
+                                            <div className="flex items-center gap-1.5 pt-1.5 border-t border-slate-100 text-[10px] mt-2">
+                                              <button 
+                                                onClick={() => handleQuickTrack(token.contract_address, token.name || token.symbol, wallet.chain_network)}
+                                                className="flex-1 py-1 px-1.5 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold flex items-center justify-center gap-1 transition-colors border border-blue-200/60 shadow-2xs"
+                                                title="Add to Coin Tracker"
+                                              >
+                                                <Activity size={10} /> + Track
+                                              </button>
+                                              <button 
+                                                onClick={() => handleQuickBlacklist(token.contract_address, token.name || token.symbol, wallet.chain_network)}
+                                                className="flex-1 py-1 px-1.5 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold flex items-center justify-center gap-1 transition-colors border border-rose-200/60 shadow-2xs"
+                                                title="Mark as Blacklist Spam"
+                                              >
+                                                <Ban size={10} /> + Blacklist
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* 2. CONFIRMED SPAM & BLACKLISTED ASSETS ACCORDION */}
                               {spamTokens.length > 0 && (
-                                <div className="mt-5 border border-rose-200 rounded-xl bg-rose-50/30 overflow-hidden">
+                                <div className="mt-4 border border-rose-200 rounded-xl bg-rose-50/30 overflow-hidden">
                                   <button 
                                     onClick={() => setShowSpam(prev => ({ ...prev, [memoryKey]: !prev[memoryKey] }))}
-                                    className="w-full px-4 py-2.5 flex justify-between items-center bg-rose-50 hover:bg-rose-100 transition-colors"
+                                    className="w-full px-4 py-2.5 flex justify-between items-center bg-rose-50 hover:bg-rose-100 transition-colors cursor-pointer"
                                   >
                                     <div className="flex items-center gap-2 text-rose-700 font-bold text-xs">
-                                      <AlertTriangle size={14} /> Blocked Spam Assets ({spamTokens.length})
+                                      <AlertTriangle size={14} /> Blocked Spam & Phishing Assets ({spamTokens.length})
                                     </div>
                                     {showSpam[memoryKey] ? <ChevronUp size={14} className="text-rose-500"/> : <ChevronDown size={14} className="text-rose-500"/>}
                                   </button>
                                   
                                   {showSpam[memoryKey] && (
-                                    <div className="p-3.5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 border-t border-rose-100">
+                                    <div className="p-3.5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 border-t border-rose-100 bg-rose-50/20">
                                       {spamTokens.map((token, tIdx) => (
-                                        <div key={`spam-${tIdx}`} className="bg-white p-2.5 rounded-lg border border-rose-100 opacity-90 hover:opacity-100 transition-opacity flex flex-col justify-between">
+                                        <div key={`spam-${tIdx}`} className="bg-white p-2.5 rounded-lg border border-rose-100 opacity-90 hover:opacity-100 transition-opacity flex flex-col justify-between shadow-2xs">
                                           <div>
                                             <div className="flex justify-between items-start mb-1.5">
-                                              <div>
-                                                <h5 className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                                              <div className="min-w-0 flex-1 mr-2">
+                                                <h5 className="text-[11px] font-bold text-slate-700 flex items-center gap-1 truncate" title={token.name || token.symbol}>
                                                   <a
                                                     href={getDexScreenerUrl(wallet.chain_network, token.contract_address)}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="hover:text-blue-600 hover:underline flex items-center gap-1"
+                                                    className="hover:text-blue-600 hover:underline flex items-center gap-1 truncate"
                                                     title="Inspect chart on DexScreener"
                                                     onClick={(e) => e.stopPropagation()}
                                                   >
-                                                    <span>{token.symbol}</span>
-                                                    <ExternalLink size={9} className="text-slate-400" />
+                                                    <span className="truncate">{token.name || token.symbol}</span>
+                                                    <ExternalLink size={9} className="text-slate-400 shrink-0" />
                                                   </a>
                                                 </h5>
-                                                <span className="text-[9px] font-mono text-slate-400 mt-0.5 block">{token.contract_address.slice(0, 6)}...{token.contract_address.slice(-4)}</span>
+                                                <span className="text-[9px] font-mono text-slate-400 mt-0.5 block">{truncateAddress(token.contract_address, 6, 4)}</span>
                                               </div>
-                                              <div className="text-right">
+                                              <div className="text-right shrink-0">
                                                 <span className="bg-rose-100 text-rose-700 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider line-through">
                                                   Fake: {formatCurrency(token.total_value_usd)}
                                                 </span>
@@ -1575,14 +1662,14 @@ export default function Dashboard() {
                                             <div className="flex items-center gap-1.5 pt-1.5 border-t border-rose-50 text-[10px] mt-1.5">
                                               <button 
                                                 onClick={() => handleQuickTrack(token.contract_address, token.name || token.symbol, wallet.chain_network)}
-                                                className="flex-1 py-1 px-1.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium flex items-center justify-center gap-1 transition-colors border border-emerald-100"
+                                                className="flex-1 py-1 px-1.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium flex items-center justify-center gap-1 transition-colors border border-emerald-100 shadow-2xs"
                                                 title="Unblock & Add to Coin Tracker"
                                               >
                                                 <Activity size={10} /> + Track
                                               </button>
                                               <button 
                                                 onClick={() => handleQuickBlacklist(token.contract_address, token.name || token.symbol, wallet.chain_network)}
-                                                className="flex-1 py-1 px-1.5 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 font-medium flex items-center justify-center gap-1 transition-colors border border-rose-100"
+                                                className="flex-1 py-1 px-1.5 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 font-medium flex items-center justify-center gap-1 transition-colors border border-rose-100 shadow-2xs"
                                                 title="Confirm Blacklist"
                                               >
                                                 <Ban size={10} /> + Blacklist
@@ -2416,23 +2503,95 @@ export default function Dashboard() {
                     </div>
                   )}
 
-                  {/* MY WALLET SPAM QUARANTINE ACCORDION */}
-                  {myWalletTokens.filter(t => t.is_spam).length > 0 && (
-                    <div className="mt-5 border border-rose-200 rounded-xl bg-rose-50/30 overflow-hidden">
+                  {/* MY WALLET ZERO-VALUE / UNINDEXED ASSETS ACCORDION */}
+                  {myWalletTokens.filter(t => t.is_spam && t.spam_reason === 'zero_value').length > 0 && (
+                    <div className="mt-5 border border-amber-200 rounded-xl bg-amber-50/30 overflow-hidden">
+                      <button 
+                        onClick={() => setShowMyWalletZeroValue(prev => !prev)}
+                        className="w-full px-4 py-2.5 flex justify-between items-center bg-amber-50/80 hover:bg-amber-100/80 transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                          <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                          Zero-Value / Unindexed Assets ({myWalletTokens.filter(t => t.is_spam && t.spam_reason === 'zero_value').length})
+                        </div>
+                        {showMyWalletZeroValue ? <ChevronUp size={14} className="text-amber-700"/> : <ChevronDown size={14} className="text-amber-700"/>}
+                      </button>
+                      
+                      {showMyWalletZeroValue && (
+                        <div className="p-3.5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 border-t border-amber-100 bg-amber-50/20">
+                          {myWalletTokens.filter(t => t.is_spam && t.spam_reason === 'zero_value').map((token, tIdx) => (
+                            <div key={`my-zv-${tIdx}`} className="bg-white p-2.5 rounded-lg border border-amber-200/60 shadow-2xs flex flex-col justify-between">
+                              <div>
+                                <div className="flex justify-between items-start mb-1.5">
+                                  <div className="min-w-0 flex-1 mr-2">
+                                    <h5 className="text-[11px] font-bold text-slate-800 flex items-center gap-1 truncate" title={token.name || token.symbol}>
+                                      <a
+                                        href={getDexScreenerUrl(connectedNetwork || 'solana', token.contract_address)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="hover:text-blue-600 hover:underline flex items-center gap-1 truncate"
+                                        title="Inspect chart on DexScreener"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <span className="truncate">{token.name || token.symbol}</span>
+                                        <ExternalLink size={9} className="text-slate-400 shrink-0" />
+                                      </a>
+                                    </h5>
+                                    <span className="text-[9px] font-mono text-slate-400 mt-0.5 block">{truncateAddress(token.contract_address, 6, 4)}</span>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <span className="bg-amber-100 text-amber-800 border border-amber-200/80 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                                      {formatCurrency(token.total_value_usd)}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex justify-between items-center text-[10px] text-slate-500 border-t border-slate-100 pt-1.5 mt-1">
+                                  <span>Qty: {token.balance} {token.symbol}</span>
+                                  <span className="text-amber-700 font-medium">Unindexed Price</span>
+                                </div>
+                              </div>
+                              {token.contract_address !== 'NATIVE_COIN' && (
+                                <div className="flex items-center gap-1.5 pt-1.5 border-t border-slate-100 text-[10px] mt-2">
+                                  <button 
+                                    onClick={() => handleQuickTrack(token.contract_address, token.name || token.symbol, connectedNetwork || 'solana')}
+                                    className="flex-1 py-1 px-1.5 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold flex items-center justify-center gap-1 transition-colors border border-blue-200/60 shadow-2xs"
+                                    title="Add to Coin Tracker"
+                                  >
+                                    <Activity size={10} /> + Track
+                                  </button>
+                                  <button 
+                                    onClick={() => handleQuickBlacklist(token.contract_address, token.name || token.symbol, connectedNetwork || 'solana')}
+                                    className="flex-1 py-1 px-1.5 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold flex items-center justify-center gap-1 transition-colors border border-rose-200/60 shadow-2xs"
+                                    title="Mark as Blacklist Spam"
+                                  >
+                                    <Ban size={10} /> + Blacklist
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* MY WALLET CONFIRMED SPAM & BLACKLISTED ACCORDION */}
+                  {myWalletTokens.filter(t => t.is_spam && t.spam_reason !== 'zero_value').length > 0 && (
+                    <div className="mt-4 border border-rose-200 rounded-xl bg-rose-50/30 overflow-hidden">
                       <button 
                         onClick={() => setShowMyWalletSpam(prev => !prev)}
                         className="w-full px-4 py-2.5 flex justify-between items-center bg-rose-50 hover:bg-rose-100 transition-colors cursor-pointer"
                       >
                         <div className="flex items-center gap-2 text-rose-700 font-bold text-xs">
-                          <AlertTriangle size={14} /> Quarantined Spam & Zero-Value Assets ({myWalletTokens.filter(t => t.is_spam).length})
+                          <AlertTriangle size={14} /> Blocked Spam & Phishing Assets ({myWalletTokens.filter(t => t.is_spam && t.spam_reason !== 'zero_value').length})
                         </div>
                         {showMyWalletSpam ? <ChevronUp size={14} className="text-rose-500"/> : <ChevronDown size={14} className="text-rose-500"/>}
                       </button>
                       
                       {showMyWalletSpam && (
-                        <div className="p-3.5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 border-t border-rose-100">
-                          {myWalletTokens.filter(t => t.is_spam).map((token, tIdx) => (
-                            <div key={`my-spam-${tIdx}`} className="bg-white p-2.5 rounded-lg border border-rose-100 opacity-90 hover:opacity-100 transition-opacity flex flex-col justify-between">
+                        <div className="p-3.5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 border-t border-rose-100 bg-rose-50/20">
+                          {myWalletTokens.filter(t => t.is_spam && t.spam_reason !== 'zero_value').map((token, tIdx) => (
+                            <div key={`my-spam-${tIdx}`} className="bg-white p-2.5 rounded-lg border border-rose-100 opacity-90 hover:opacity-100 transition-opacity flex flex-col justify-between shadow-2xs">
                               <div>
                                 <div className="flex justify-between items-start mb-1.5">
                                   <div className="min-w-0 flex-1 mr-2">
@@ -2449,11 +2608,11 @@ export default function Dashboard() {
                                         <ExternalLink size={9} className="text-slate-400 shrink-0" />
                                       </a>
                                     </h5>
-                                    <span className="text-[9px] font-mono text-slate-400 mt-0.5 block">{token.contract_address.slice(0, 6)}...{token.contract_address.slice(-4)}</span>
+                                    <span className="text-[9px] font-mono text-slate-400 mt-0.5 block">{truncateAddress(token.contract_address, 6, 4)}</span>
                                   </div>
                                   <div className="text-right shrink-0">
-                                    <span className="bg-rose-100 text-rose-700 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
-                                      {formatCurrency(token.total_value_usd)}
+                                    <span className="bg-rose-100 text-rose-700 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider line-through">
+                                      Fake: {formatCurrency(token.total_value_usd)}
                                     </span>
                                   </div>
                                 </div>
@@ -2462,14 +2621,14 @@ export default function Dashboard() {
                                 <div className="flex items-center gap-1.5 pt-1.5 border-t border-rose-50 text-[10px] mt-1.5">
                                   <button 
                                     onClick={() => handleQuickTrack(token.contract_address, token.name || token.symbol, connectedNetwork || 'solana')}
-                                    className="flex-1 py-1 px-1.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium flex items-center justify-center gap-1 transition-colors border border-emerald-100"
+                                    className="flex-1 py-1 px-1.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium flex items-center justify-center gap-1 transition-colors border border-emerald-100 shadow-2xs"
                                     title="Unblock & Add to Coin Tracker"
                                   >
                                     <Activity size={10} /> + Track
                                   </button>
                                   <button 
                                     onClick={() => handleQuickBlacklist(token.contract_address, token.name || token.symbol, connectedNetwork || 'solana')}
-                                    className="flex-1 py-1 px-1.5 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 font-medium flex items-center justify-center gap-1 transition-colors border border-rose-100"
+                                    className="flex-1 py-1 px-1.5 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-700 font-medium flex items-center justify-center gap-1 transition-colors border border-rose-100 shadow-2xs"
                                     title="Confirm Blacklist"
                                   >
                                     <Ban size={10} /> + Blacklist

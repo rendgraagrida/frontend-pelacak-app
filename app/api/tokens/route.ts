@@ -216,23 +216,37 @@ export async function POST(request: Request) {
       const numBalance = parseFloat(balanceFormatted);
       const priceUsd = knownStable ? knownStable.price_usd : dexInfo.price_usd;
       const totalValueUsd = numBalance * priceUsd;
-
-      let isSpam = false;
       const validLogo = (typeof dexInfo.logo === 'string' && dexInfo.logo.length > 5) || (typeof meta.logo === 'string' && meta.logo.length > 5);
 
       // 🚫 SPAM / QUARANTINE FILTER:
-      // 1. Blacklist -> Paksa spam
+      // 1. Blacklist -> Paksa spam (alasan: blacklist)
       // 2. VIP -> Selalu lolos
-      // 3. Unknown price / 0 USD value / No logo -> Karantina sebagai spam
+      // 3. Scam keywords -> Spam (alasan: keyword)
+      // 4. Unknown price / 0 USD value -> Karantina Zero Value (alasan: zero_value)
+      let isSpam = false;
+      let spamReason: 'blacklist' | 'keyword' | 'zero_value' | null = null;
       if (BLACKLISTED_TOKENS.includes(contract)) {
         isSpam = true;
+        spamReason = 'blacklist';
       } else if (VIP_TOKENS.includes(contract)) {
         isSpam = false;
       } else {
-        if (!priceUsd || priceUsd <= 0 || !totalValueUsd || totalValueUsd <= 0) {
+        const lowerName = (meta.name || "").toLowerCase();
+        const hasKeyword = 
+          lowerName.includes("giftbox") || 
+          lowerName.includes("claim") || 
+          lowerName.includes("reward") || 
+          lowerName.includes("voucher");
+
+        if (hasKeyword) {
           isSpam = true;
+          spamReason = 'keyword';
+        } else if (!priceUsd || priceUsd <= 0 || !totalValueUsd || totalValueUsd <= 0) {
+          isSpam = true;
+          spamReason = 'zero_value';
         } else if (!validLogo && totalValueUsd < 0.01) {
           isSpam = true;
+          spamReason = 'zero_value';
         }
       }
 
@@ -244,7 +258,8 @@ export async function POST(request: Request) {
         balance: balanceFormatted,
         price_usd: priceUsd,
         total_value_usd: totalValueUsd,
-        is_spam: isSpam
+        is_spam: isSpam,
+        spam_reason: spamReason
       };
     });
 
@@ -274,7 +289,8 @@ export async function POST(request: Request) {
         balance: nativeBalanceNum.toFixed(4),
         price_usd: nativePriceUsd,
         total_value_usd: nativeBalanceNum * nativePriceUsd,
-        is_spam: false
+        is_spam: false,
+        spam_reason: null
       });
     }
 

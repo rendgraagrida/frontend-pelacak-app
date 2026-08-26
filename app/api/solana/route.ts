@@ -245,28 +245,32 @@ export async function POST(request: Request) {
       }
 
       // 🚫 SPAM / QUARANTINE FILTER:
-      // 1. Blacklist -> Paksa spam
+      // 1. Blacklist -> Paksa spam (alasan: blacklist)
       // 2. VIP -> Selalu lolos
-      // 3. Unknown price / 0 USD value / Scam keywords -> Karantina sebagai spam
+      // 3. Scam keywords -> Spam (alasan: keyword)
+      // 4. Unknown price / 0 USD value -> Karantina Zero Value (alasan: zero_value)
       let isSpam = false;
+      let spamReason: 'blacklist' | 'keyword' | 'zero_value' | null = null;
       if (isBlacklisted) {
         isSpam = true;
+        spamReason = 'blacklist';
       } else if (!isVip) {
         const lowerName = tokenName.toLowerCase();
         const lowerUri = (onChain.uri || "").toLowerCase();
-        if (
-          !price || 
-          price <= 0 || 
-          !totalValue || 
-          totalValue <= 0 ||
+        const hasKeyword = 
           lowerName.includes("giftbox") || 
           lowerName.includes("claim") || 
           lowerName.includes("reward") || 
           lowerName.includes("voucher") ||
           lowerUri.includes("giftbox") ||
-          lowerUri.includes("voucher")
-        ) {
+          lowerUri.includes("voucher");
+
+        if (hasKeyword) {
           isSpam = true;
+          spamReason = 'keyword';
+        } else if (!price || price <= 0 || !totalValue || totalValue <= 0) {
+          isSpam = true;
+          spamReason = 'zero_value';
         }
       }
 
@@ -278,7 +282,8 @@ export async function POST(request: Request) {
         balance: t.amountString,
         price_usd: price,
         total_value_usd: totalValue,
-        is_spam: isSpam
+        is_spam: isSpam,
+        spam_reason: spamReason
       };
     });
 
@@ -294,7 +299,8 @@ export async function POST(request: Request) {
         balance: solBalanceNum.toFixed(4),
         price_usd: solPriceUsd,
         total_value_usd: solBalanceNum * solPriceUsd,
-        is_spam: false
+        is_spam: false,
+        spam_reason: null
       });
     }
 
