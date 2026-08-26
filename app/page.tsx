@@ -1140,7 +1140,7 @@ export default function Dashboard() {
                 <button
                   onClick={handleSyncAll}
                   disabled={isSyncingAll || wallets.length === 0}
-                  className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-60 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all text-xs font-bold shadow-2xs"
+                  className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-60 px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs font-bold shadow-2xs"
                   title="Scan and sync all target wallet balances"
                 >
                   <RefreshCw size={13} className={isSyncingAll ? "animate-spin text-blue-600" : "text-slate-500"} />
@@ -1154,7 +1154,7 @@ export default function Dashboard() {
                 <button
                   onClick={handleDeleteAllWatchlist}
                   disabled={wallets.length === 0}
-                  className="bg-red-50 border border-red-200/80 hover:bg-red-100 text-red-700 disabled:opacity-60 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all text-xs font-bold shadow-2xs"
+                  className="bg-rose-50 border border-rose-200/80 hover:bg-rose-100 text-rose-700 disabled:opacity-60 px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs font-bold shadow-2xs"
                   title="Delete All Target Wallets"
                 >
                   <Trash2 size={13} />
@@ -1363,24 +1363,24 @@ export default function Dashboard() {
                             {isSupported ? (
                               <button 
                                 onClick={() => handleToggleTokens(wallet.wallet_address, wallet.chain_network)}
-                                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs border ${
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs border ${
                                   isExpanded 
                                     ? 'bg-blue-600 text-white border-blue-600' 
                                     : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200/60'
                                 }`}
                               >
                                 <span>Inspect</span>
-                                {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                               </button>
                             ) : (
-                              <span className="text-xs text-slate-400 font-medium px-3 py-1.5 bg-slate-100 rounded-lg">Unsupported</span>
+                              <span className="text-xs text-slate-400 font-semibold px-3 py-1.5 bg-slate-100 rounded-lg border border-slate-200/60">Unsupported</span>
                             )}
 
                             <a 
                               href={getExplorerUrl(wallet.chain_network, 'NATIVE_COIN', wallet.wallet_address)} 
                               target="_blank" 
                               rel="noopener noreferrer" 
-                              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-slate-200 shadow-2xs"
+                              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-slate-200/80 shadow-2xs"
                               title="View on Explorer"
                             >
                               <span>Explorer</span>
@@ -1389,10 +1389,11 @@ export default function Dashboard() {
 
                             <button 
                               onClick={() => handleDeleteWallet(wallet.wallet_address, wallet.chain_network)} 
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                              className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-rose-200/60 shadow-2xs"
                               title="Delete Target Wallet"
                             >
-                              <Trash2 size={15} />
+                              <Trash2 size={13} />
+                              <span>Delete</span>
                             </button>
                           </div>
 
@@ -1675,20 +1676,20 @@ export default function Dashboard() {
                 <button
                   onClick={fetchTrackedCoins}
                   disabled={isTrackLoading || trackedCoins.length === 0}
-                  className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-60 px-3.5 py-1.5 rounded-lg flex items-center gap-2 transition-all text-xs font-bold shadow-sm"
+                  className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-60 px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs font-bold shadow-2xs"
                   title="Force refresh token data"
                 >
-                  <RefreshCw size={14} className={isTrackLoading ? "animate-spin text-blue-600" : "text-slate-500"} />
-                  <span className="hidden sm:inline">Sync Now</span>
+                  <RefreshCw size={13} className={isTrackLoading ? "animate-spin text-blue-600" : "text-slate-500"} />
+                  <span>Sync Now</span>
                 </button>
                 <button
                   onClick={handleDeleteAllTrack}
                   disabled={trackedCoins.length === 0}
-                  className="bg-red-50 border border-red-200 hover:bg-red-100 text-red-700 disabled:opacity-60 px-3.5 py-1.5 rounded-lg flex items-center gap-2 transition-all text-xs font-bold shadow-sm"
+                  className="bg-rose-50 border border-rose-200/80 hover:bg-rose-100 text-rose-700 disabled:opacity-60 px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs font-bold shadow-2xs"
                   title="Delete All Tracked Coins"
                 >
-                  <Trash2 size={14} />
-                  <span className="hidden sm:inline">Delete All</span>
+                  <Trash2 size={13} />
+                  <span>Delete All</span>
                 </button>
               </div>
             </div>
@@ -1887,19 +1888,20 @@ export default function Dashboard() {
                               href={coin.dex_url} 
                               target="_blank" 
                               rel="noopener noreferrer" 
-                              className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-blue-200/60 shadow-2xs"
+                              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-slate-200/80 shadow-2xs"
                               title="Open Live DexScreener Chart"
                             >
-                              <span>Live Chart</span>
+                              <span>Chart</span>
                               <ExternalLink size={12} />
                             </a>
 
                             <button 
                               onClick={() => handleRemoveTrack(coin.contract_address)} 
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100 ml-1" 
+                              className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-rose-200/60 shadow-2xs" 
                               title="Remove from Coin Tracker"
                             >
-                              <Trash2 size={15} />
+                              <Trash2 size={13} />
+                              <span>Delete</span>
                             </button>
                           </div>
 
@@ -1938,7 +1940,7 @@ export default function Dashboard() {
                 <button
                   onClick={handleDeleteAllBlacklist}
                   disabled={blacklist.length === 0}
-                  className="bg-rose-50 border border-rose-200/80 hover:bg-rose-100 text-rose-700 disabled:opacity-60 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all text-xs font-bold shadow-2xs w-full md:w-auto justify-center"
+                  className="bg-rose-50 border border-rose-200/80 hover:bg-rose-100 text-rose-700 disabled:opacity-60 px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs font-bold shadow-2xs w-full md:w-auto justify-center"
                   title="Delete All Blacklisted Tokens"
                 >
                   <Trash2 size={13} />
@@ -2079,7 +2081,7 @@ export default function Dashboard() {
                             href={getDexScreenerUrl(item.chain_network || 'solana', item.contract_address)} 
                             target="_blank" 
                             rel="noopener noreferrer" 
-                            className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-slate-200 shadow-2xs"
+                            className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-slate-200/80 shadow-2xs"
                             title="Inspect on DexScreener"
                           >
                             <span>Chart</span>
@@ -2088,7 +2090,7 @@ export default function Dashboard() {
 
                           <button 
                             onClick={() => handleRemoveBlacklist(item.contract_address)} 
-                            className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-rose-200/80 shadow-2xs"
+                            className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-rose-200/60 shadow-2xs"
                             title="Remove from Blacklist"
                           >
                             <Trash2 size={13} />
@@ -2132,7 +2134,7 @@ export default function Dashboard() {
                   <button 
                     onClick={fetchMyWalletTokens} 
                     disabled={myWalletLoading} 
-                    className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-60 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all text-xs font-bold shadow-2xs"
+                    className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 disabled:opacity-60 px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs font-bold shadow-2xs"
                   >
                     <RefreshCw size={13} className={myWalletLoading ? "animate-spin text-emerald-600" : "text-slate-500"} />
                     <span>Sync Balances</span>
@@ -2140,7 +2142,7 @@ export default function Dashboard() {
 
                   <button 
                     onClick={disconnectWallet} 
-                    className="bg-rose-50 border border-rose-200/80 hover:bg-rose-100 text-rose-700 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all text-xs font-bold shadow-2xs"
+                    className="bg-rose-50 border border-rose-200/80 hover:bg-rose-100 text-rose-700 px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-xs font-bold shadow-2xs"
                   >
                     <X size={13} />
                     <span>Disconnect</span>
@@ -2353,7 +2355,7 @@ export default function Dashboard() {
 
                                   <button 
                                     onClick={() => handleQuickBlacklist(token.contract_address, token.name || token.symbol, connectedNetwork || 'solana')}
-                                    className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-rose-200/80 shadow-2xs"
+                                    className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-rose-200/60 shadow-2xs"
                                     title="Add to Blacklist"
                                   >
                                     <Ban size={13} />
@@ -2366,7 +2368,7 @@ export default function Dashboard() {
                                 href={getDexScreenerUrl(connectedNetwork || 'solana', token.contract_address)}
                                 target="_blank" 
                                 rel="noopener noreferrer" 
-                                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-slate-200 shadow-2xs"
+                                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors border border-slate-200/80 shadow-2xs"
                                 title="Open Live DexScreener Chart"
                               >
                                 <span>Chart</span>
