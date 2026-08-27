@@ -2844,7 +2844,8 @@ export default function Dashboard() {
                     <tr>
                       <th className="px-5 py-3">Type</th>
                       <th className="px-5 py-3 text-right">Amount</th>
-                      <th className="px-5 py-3 text-right">Value (USD)</th>
+                      <th className="px-5 py-3 text-right">Est. Value (USD)</th>
+                      <th className="px-5 py-3 text-right">Est. Market Cap</th>
                       <th className="px-5 py-3 text-left">Timestamp</th>
                       <th className="px-5 py-3 text-right">Explorer</th>
                     </tr>
@@ -2868,9 +2869,16 @@ export default function Dashboard() {
                         <td className="px-5 py-3 text-right font-bold text-slate-800 font-sans">
                           {tx.value_usd 
                             ? `$${Math.abs(tx.value_usd).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                            : currentHistoryParams?.priceUsd
-                              ? `$${(tx.amount * currentHistoryParams.priceUsd).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                              : <span className="text-slate-300 font-normal">—</span>}
+                            : tx.historical_price_usd
+                              ? `$${(tx.amount * tx.historical_price_usd).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                              : currentHistoryParams?.priceUsd
+                                ? `$${(tx.amount * currentHistoryParams.priceUsd).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                : <span className="text-slate-300 font-normal">—</span>}
+                        </td>
+                        <td className="px-5 py-3 text-right font-bold text-slate-800 font-sans">
+                          {tx.historical_mc
+                            ? `${formatCompactUSD(tx.historical_mc)}`
+                            : <span className="text-slate-300 font-normal" title="No historical data available">—</span>}
                         </td>
                         <td className="px-5 py-3 text-xs text-slate-500 font-sans">
                           {tx.timestamp

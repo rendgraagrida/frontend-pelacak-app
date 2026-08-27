@@ -1,5 +1,50 @@
 import { NextResponse } from 'next/server';
 
+async function enrichHistory(history: any[], contract_address: string) {
+  if (history.length === 0) return history;
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${contract_address}`);
+    if (!res.ok) return history;
+    const data = await res.json();
+    if (!data.pairs || data.pairs.length === 0) return history;
+    
+    // Get most liquid pair
+    const pair = data.pairs.sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+    const currentPriceUsd = parseFloat(pair.priceUsd || '0');
+    const currentPriceNative = parseFloat(pair.priceNative || '0');
+    const currentMcap = pair.fdv || pair.marketCap || 0;
+
+    return history.map(tx => {
+      let historicalPriceUsd = null;
+      let historicalMc = null;
+
+      if (tx.amount > 0) {
+        if (tx.value_usd > 0) {
+          historicalPriceUsd = tx.value_usd / tx.amount;
+        } else if (tx.value_native > 0 && currentPriceUsd > 0 && currentPriceNative > 0) {
+          const historicalPriceNative = tx.value_native / tx.amount;
+          if (currentMcap > 0) {
+            historicalMc = (historicalPriceNative / currentPriceNative) * currentMcap;
+            historicalPriceUsd = historicalPriceNative * (currentPriceUsd / currentPriceNative); 
+          }
+        }
+
+        if (historicalPriceUsd !== null && historicalPriceUsd > 0 && currentPriceUsd > 0 && currentMcap > 0 && !historicalMc) {
+          historicalMc = (historicalPriceUsd / currentPriceUsd) * currentMcap;
+        }
+      }
+
+      return {
+        ...tx,
+        historical_price_usd: historicalPriceUsd,
+        historical_mc: historicalMc
+      };
+    });
+  } catch (e) {
+    return history;
+  }
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const wallet_address = searchParams.get('wallet_address');
@@ -36,14 +81,33 @@ export async function GET(request: Request) {
 
       for (const tx of txList) {
         const transfers: any[] = tx.tokenTransfers || [];
+        const nativeTransfers: any[] = tx.nativeTransfers || [];
+        
+        let solSpent = 0;
+        let solReceived = 0;
+        for (const nt of nativeTransfers) {
+          if (nt.fromUserAccount?.toLowerCase() === wallet_address.toLowerCase()) {
+            solSpent += (nt.amount || 0) / 1e9;
+          }
+          if (nt.toUserAccount?.toLowerCase() === wallet_address.toLowerCase()) {
+            solReceived += (nt.amount || 0) / 1e9;
+          }
+        }
+
         for (const t of transfers) {
           if (t.mint?.toLowerCase() !== mintLower) continue;
           const isBuy = t.toUserAccount?.toLowerCase() === wallet_address.toLowerCase();
+          
+          let value_native = 0;
+          if (isBuy && solSpent > 0) value_native = solSpent;
+          if (!isBuy && solReceived > 0) value_native = solReceived;
+
           history.push({
             type: isBuy ? 'IN' : 'OUT',
             amount: t.tokenAmount || 0,
             symbol: null,
             value_usd: null,
+            value_native,
             timestamp: tx.timestamp ? new Date(tx.timestamp * 1000).toISOString() : null,
             tx_hash: tx.signature,
             explorer_url: `https://solscan.io/tx/${tx.signature}`,
@@ -53,7 +117,8 @@ export async function GET(request: Request) {
         }
       }
 
-      return NextResponse.json({ history: history.slice(0, 25) });
+      const finalHistory = await enrichHistory(history.slice(0, 25), contract_address);
+      return NextResponse.json({ history: finalHistory });
     }
 
     // EVM via Alchemy (Fast) or Covalent (Fallback)
@@ -140,7 +205,8 @@ export async function GET(request: Request) {
         return tb - ta;
       });
 
-      return NextResponse.json({ history: history.slice(0, 25) });
+      const finalHistory = await enrichHistory(history.slice(0, 25), contract_address);
+      return NextResponse.json({ history: finalHistory });
     }
 
     // Fallback to Covalent if chain not supported by Alchemy
@@ -192,7 +258,8 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ history: history.slice(0, 25) });
+    const finalHistory = await enrichHistory(history.slice(0, 25), contract_address);
+    return NextResponse.json({ history: finalHistory });
 
   } catch (error: any) {
     console.error('Error fetching history:', error.message);
