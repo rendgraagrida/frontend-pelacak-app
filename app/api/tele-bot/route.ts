@@ -256,6 +256,7 @@ export async function POST(request: Request) {
           `  • <code>/summary</code> — View combined net worth & tracking overview`,
           `  • <code>/watchlist</code> — List all active tracked target wallets`,
           `  • <code>/coins</code> — Real-time price & RSI indicators for tracked coins`,
+          `  • <code>/search &lt;address&gt;</code> — Search for a token's price and info`,
           `  • <code>/scan</code> — Force immediate scan for whale moves & RSI signals`,
           `  • <code>/help</code> — Show this commands menu`,
           ``,
@@ -366,6 +367,58 @@ export async function POST(request: Request) {
           }
         }
         await sendTelegramMessage(text, { chatId: fromChatId });
+        return NextResponse.json({ ok: true });
+      }
+
+      if (incomingText.startsWith('/search')) {
+        const parts = incomingText.split(' ');
+        if (parts.length < 2) {
+          await sendTelegramMessage(`ℹ️ <b>Usage:</b> /search &lt;contract_address&gt;`, { chatId: fromChatId });
+          return NextResponse.json({ ok: true });
+        }
+
+        const address = parts[1].trim();
+        try {
+          const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${address}`);
+          if (!res.ok) throw new Error('API Error');
+          const data = await res.json();
+          if (!data.pairs || data.pairs.length === 0) {
+            await sendTelegramMessage(`❌ No data found for <code>${address}</code> on DexScreener.`, { chatId: fromChatId });
+            return NextResponse.json({ ok: true });
+          }
+
+          // Get the most liquid pair
+          const pair = data.pairs.sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+
+          const priceUsd = parseFloat(pair.priceUsd || '0');
+          const priceStr = priceUsd > 0
+            ? (priceUsd < 0.0001
+              ? `$${priceUsd.toFixed(8)}`
+              : priceUsd < 0.01
+                ? `$${priceUsd.toFixed(6)}`
+                : `$${priceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`)
+            : '<i>N/A</i>';
+            
+          const mcap = pair.marketCap ? formatCompact(pair.marketCap) : 'N/A';
+          const liq = pair.liquidity?.usd ? formatCompact(pair.liquidity.usd) : 'N/A';
+          const vol24h = pair.volume?.h24 ? formatCompact(pair.volume.h24) : 'N/A';
+          const change24h = pair.priceChange?.h24 || 0;
+          const changeStr = change24h > 0 ? `▲ ${change24h.toFixed(2)}%` : `▼ ${Math.abs(change24h).toFixed(2)}%`;
+
+          let msg = `🔎 <b>COIN SEARCH RESULT</b>\n\n`;
+          msg += `<b>Name:</b> ${pair.baseToken?.name} (${pair.baseToken?.symbol})\n`;
+          msg += `<b>Chain:</b> ${(pair.chainId || '').toUpperCase()}\n`;
+          msg += `<b>Address:</b> <code>${address}</code>\n\n`;
+          msg += `💵 <b>Price:</b> ${priceStr} | <b>${changeStr}</b>\n`;
+          msg += `💎 <b>Market Cap:</b> $${mcap}\n`;
+          msg += `💧 <b>Liquidity:</b> $${liq}\n`;
+          msg += `📊 <b>Volume (24h):</b> $${vol24h}\n\n`;
+          msg += `<a href="${pair.url}">📈 View Chart on DexScreener</a>`;
+
+          await sendTelegramMessage(msg, { chatId: fromChatId });
+        } catch (err) {
+          await sendTelegramMessage(`❌ Failed to search for <code>${address}</code>.`, { chatId: fromChatId });
+        }
         return NextResponse.json({ ok: true });
       }
 
