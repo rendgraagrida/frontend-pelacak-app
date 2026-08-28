@@ -7,7 +7,8 @@ import {
   formatWhaleAlert,
   formatRsiAlert,
   formatVolumeAlert,
-  formatSummaryMessage
+  formatSummaryMessage,
+  formatNewTokenAlert
 } from '@/app/lib/telegram';
 
 function getSupabase() {
@@ -490,6 +491,107 @@ export async function POST(request: Request) {
   }
 }
 
+async function scanWalletRecentTrades(supabase: any, wallets: any[], initialAlerts: number, alertSummaries: string[]) {
+  let alertsSent = initialAlerts;
+  const MAX_AGE_MINUTES = 60; // Flag as new token if pair is younger than this
+  const HELIUS_KEY = process.env.HELIUS_API_KEY;
+  if (!HELIUS_KEY) return alertsSent;
+
+  // We only scan Solana wallets for this feature for now to prevent timeouts
+  const solanaWallets = wallets.filter(w => w.chain_network?.toLowerCase() === 'solana' || !w.wallet_address.startsWith('0x'));
+
+  for (const wallet of solanaWallets) {
+    try {
+      const url = `https://api.helius.xyz/v0/addresses/${wallet.wallet_address}/transactions?api-key=${HELIUS_KEY}&limit=10`;
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const txList: any[] = await res.json();
+
+      // Find token purchases
+      for (const tx of txList) {
+        const transfers = tx.tokenTransfers || [];
+        for (const t of transfers) {
+          // If wallet received a token (BUY)
+          if (t.toUserAccount?.toLowerCase() === wallet.wallet_address.toLowerCase()) {
+            const contractAddress = t.mint;
+            if (!contractAddress) continue;
+            
+            // Check if already alerted
+            const { data: existingAlert } = await supabase
+              .from('alert_logs')
+              .select('tx_hash')
+              .eq('tx_hash', tx.signature)
+              .maybeSingle();
+            
+            if (existingAlert) continue; // Already processed this tx
+
+            // Check DexScreener for token age
+            const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${contractAddress}`);
+            if (!dexRes.ok) continue;
+            const dexData = await dexRes.json();
+            if (!dexData.pairs || dexData.pairs.length === 0) continue;
+
+            const pair = dexData.pairs.sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+            const pairCreatedAt = pair.pairCreatedAt; // timestamp in ms
+            if (!pairCreatedAt) continue;
+
+            const ageMinutes = Math.floor((Date.now() - pairCreatedAt) / (60 * 1000));
+            
+            if (ageMinutes >= 0 && ageMinutes <= MAX_AGE_MINUTES) {
+               // Calculate value USD if possible
+               let valueUsd = null;
+               const solTransfers = tx.nativeTransfers || [];
+               let solSpent = 0;
+               for (const nt of solTransfers) {
+                 if (nt.fromUserAccount?.toLowerCase() === wallet.wallet_address.toLowerCase()) {
+                   solSpent += (nt.amount || 0) / 1e9;
+                 }
+               }
+               if (solSpent > 0 && pair.priceNative && pair.priceUsd) {
+                 const priceNative = parseFloat(pair.priceNative);
+                 const priceUsd = parseFloat(pair.priceUsd);
+                 if (priceNative > 0) {
+                   const solPrice = priceUsd / priceNative;
+                   valueUsd = solSpent * solPrice;
+                 }
+               }
+
+               // Fire Alert
+               const msg = formatNewTokenAlert({
+                 whaleName: wallet.label || 'Unknown Whale',
+                 whaleAddress: wallet.wallet_address,
+                 tokenSymbol: pair.baseToken?.symbol || '?',
+                 tokenName: pair.baseToken?.name || 'Unknown',
+                 contractAddress: contractAddress,
+                 chain: 'Solana',
+                 ageMinutes: ageMinutes,
+                 amountToken: t.tokenAmount || 0,
+                 valueUsd: valueUsd,
+                 txHash: tx.signature
+               });
+
+               await sendTelegramMessage(msg);
+               alertsSent++;
+               alertSummaries.push(`New token snipe alert for ${wallet.label} buying ${pair.baseToken?.symbol}`);
+
+               // Insert to alert_logs (fire and forget)
+               await supabase.from('alert_logs').insert([{
+                 tx_hash: tx.signature,
+                 alert_type: 'new_token_snipe',
+                 wallet_address: wallet.wallet_address,
+                 contract_address: contractAddress
+               }]);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error(`[RADAR SCAN] Error scanning wallet ${wallet.wallet_address}:`, e);
+    }
+  }
+  return alertsSent;
+}
+
 /**
  * Core scanning routine that inspects database records and dispatches alerts
  */
@@ -548,11 +650,12 @@ async function executeRadarScan(supabase: any) {
     console.error('[RADAR SCAN] Error scanning coins:', err);
   }
 
-  // 2. Scan Tracked Wallets
+  // 2. Scan Tracked Wallets for New Token Alerts
   try {
     const { data: wallets } = await supabase.from('watchlist').select('*');
-    if (wallets) {
+    if (wallets && wallets.length > 0) {
       scannedWallets = wallets.length;
+      alertsSent = await scanWalletRecentTrades(supabase, wallets, alertsSent, alertSummaries);
     }
   } catch (err) {
     console.error('[RADAR SCAN] Error scanning wallets:', err);

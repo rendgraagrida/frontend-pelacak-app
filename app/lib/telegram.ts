@@ -157,6 +157,46 @@ export function formatVolumeAlert(params: {
 }
 
 /**
+ * Builds HTML alert for new token purchases (Whale Sniper Alert)
+ */
+export function formatNewTokenAlert(params: {
+  whaleName: string;
+  whaleAddress: string;
+  tokenSymbol: string;
+  tokenName: string;
+  contractAddress: string;
+  chain: string;
+  ageMinutes: number;
+  amountToken: number;
+  valueUsd?: number | null;
+  txHash: string;
+}): string {
+  const dexUrl = `https://dexscreener.com/${params.chain.toLowerCase()}/${params.contractAddress}`;
+  const explorerUrl = params.chain.toLowerCase() === 'solana' 
+    ? `https://solscan.io/tx/${params.txHash}`
+    : `https://etherscan.io/tx/${params.txHash}`; // Simplified for other chains
+
+  return [
+    `🚨 <b>WHALE SNIPER ALERT</b> 🚨`,
+    ``,
+    `🎯 <b>Target:</b> <b>${params.whaleName}</b>`,
+    `<code>${params.whaleAddress}</code>`,
+    ``,
+    `🔥 <b>Just Bought a VERY NEW Token!</b>`,
+    `🪙 <b>Token:</b> <b>${params.tokenName} (${params.tokenSymbol.toUpperCase()})</b>`,
+    `<code>${params.contractAddress}</code>`,
+    `⏱ <b>Token Age:</b> <b>${params.ageMinutes} minutes old</b>`,
+    ``,
+    `💰 <b>Amount Bought:</b> ${params.amountToken.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${params.tokenSymbol.toUpperCase()}`,
+    params.valueUsd ? `💵 <b>Est. USD Value:</b> $${params.valueUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '',
+    ``,
+    `📈 <a href="${dexUrl}">View Chart on DexScreener</a>`,
+    `🔗 <a href="${explorerUrl}">View Transaction</a>`,
+    `⏱ <i>Time: ${new Date().toUTCString()}</i>`
+  ].filter(Boolean).join('\n');
+}
+
+/**
  * Builds HTML formatted portfolio & tracking status summary
  */
 export function formatSummaryMessage(params: {
