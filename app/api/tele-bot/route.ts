@@ -606,10 +606,14 @@ async function executeRadarScan(supabase: any) {
   }
 
   // 1. Scan Tracked Coins for RSI Extremes and Volume Surges
-  try {
-    const { data: coins } = await supabase.from('tracked_coins').select('*');
-    if (coins && coins.length > 0) {
-      scannedCoins = coins.length;
+  // Controlled via ENABLE_COIN_SCANNER environment variable (default: false to prioritize wallet scanning)
+  const isCoinScannerEnabled = process.env.ENABLE_COIN_SCANNER === 'true';
+
+  if (isCoinScannerEnabled) {
+    try {
+      const { data: coins } = await supabase.from('tracked_coins').select('*');
+      if (coins && coins.length > 0) {
+        scannedCoins = coins.length;
 
       for (const coin of coins) {
         // RSI Extreme check (simulated / stored in DB or recent indicator)
@@ -646,8 +650,9 @@ async function executeRadarScan(supabase: any) {
         }
       }
     }
-  } catch (err) {
-    console.error('[RADAR SCAN] Error scanning coins:', err);
+    } catch (err) {
+      console.error('[RADAR SCAN] Error scanning coins:', err);
+    }
   }
 
   // 2. Scan Tracked Wallets for New Token Alerts
