@@ -112,10 +112,11 @@ function getMoralisChain(network: string): string | null {
  */
 async function fetchWalletBalancesLive(wallets: any[]): Promise<any[]> {
   const moralisKey = process.env.MORALIS_API_KEY || '';
-  const solRpc = process.env.ALCHEMY_SOL_URL || 'https://api.mainnet-beta.solana.com';
+  const heliusKey = process.env.HELIUS_API_KEY;
+  const solRpc = process.env.ALCHEMY_SOL_URL || (heliusKey ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}` : 'https://api.mainnet-beta.solana.com');
 
   return Promise.all(wallets.map(async (wallet: any) => {
-    let nativeBalance = 0;
+    let nativeBalance: number | null = null;
     const net = (wallet.chain_network || '').toUpperCase();
     const moralisChain = getMoralisChain(net);
 
@@ -129,6 +130,7 @@ async function fetchWalletBalancesLive(wallets: any[]): Promise<any[]> {
         if (res.ok) {
           const bData = await res.json();
           if (bData.balance) nativeBalance = Number(bData.balance) / 1e18;
+          else nativeBalance = 0;
         }
       } else if (net === 'SOLANA') {
         // Solana balance via JSON-RPC
@@ -142,18 +144,20 @@ async function fetchWalletBalancesLive(wallets: any[]): Promise<any[]> {
         });
         if (res.ok) {
           const rpcData = await res.json();
-          const lamports = rpcData?.result?.value || 0;
-          nativeBalance = lamports / 1e9; // lamports -> SOL
+          const lamports = rpcData?.result?.value;
+          if (lamports !== undefined) {
+            nativeBalance = lamports / 1e9; // lamports -> SOL
+          }
         }
       }
     } catch (_e) {
-      // silent fail — balance stays 0
+      // silent fail — balance stays null
     }
 
     return {
       ...wallet,
       nativeBalance,
-      balanceDisplay: nativeBalance > 0
+      balanceDisplay: nativeBalance !== null
         ? `${nativeBalance.toFixed(4)} ${net === 'SOLANA' ? 'SOL' : net === 'BSC' ? 'BNB' : 'ETH'}`
         : 'Unscanned'
     };
