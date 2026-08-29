@@ -606,8 +606,18 @@ async function executeRadarScan(supabase: any) {
   }
 
   // 1. Scan Tracked Coins for RSI Extremes and Volume Surges
-  // Controlled via ENABLE_COIN_SCANNER environment variable (default: false to prioritize wallet scanning)
-  const isCoinScannerEnabled = process.env.ENABLE_COIN_SCANNER === 'true';
+  // Controlled via app_settings table (default: false to prioritize wallet scanning)
+  let isCoinScannerEnabled = false;
+  try {
+    const { data: setting } = await supabase.from('app_settings').select('value').eq('key', 'ENABLE_COIN_SCANNER').maybeSingle();
+    if (setting) {
+      isCoinScannerEnabled = setting.value === 'true';
+    } else {
+      isCoinScannerEnabled = process.env.ENABLE_COIN_SCANNER === 'true'; // Fallback to env var
+    }
+  } catch (err) {
+    isCoinScannerEnabled = process.env.ENABLE_COIN_SCANNER === 'true';
+  }
 
   if (isCoinScannerEnabled) {
     try {

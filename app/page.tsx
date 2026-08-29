@@ -165,12 +165,30 @@ export default function Dashboard() {
   const [isSendingTelegramTest, setIsSendingTelegramTest] = useState(false);
   const [isScanningTelegramRadar, setIsScanningTelegramRadar] = useState(false);
   const [telegramStatus, setTelegramStatus] = useState<any>(null);
+  const [isCoinScannerEnabled, setIsCoinScannerEnabled] = useState(false);
+  const [isSettingScanner, setIsSettingScanner] = useState(false);
 
   const fetchTelegramStatus = async () => {
     try {
       const res = await axios.get('/api/tele-bot');
       setTelegramStatus(res.data);
+      
+      const settingsRes = await axios.get('/api/settings');
+      setIsCoinScannerEnabled(settingsRes.data.ENABLE_COIN_SCANNER === 'true');
     } catch (err) {}
+  };
+
+  const handleToggleCoinScanner = async () => {
+    try {
+      setIsSettingScanner(true);
+      const newValue = !isCoinScannerEnabled;
+      await axios.post('/api/settings', { key: 'ENABLE_COIN_SCANNER', value: newValue ? 'true' : 'false' });
+      setIsCoinScannerEnabled(newValue);
+    } catch (err) {
+      alert('Failed to update setting');
+    } finally {
+      setIsSettingScanner(false);
+    }
   };
 
   const handleSendTelegramTest = async () => {
@@ -3117,35 +3135,47 @@ export default function Dashboard() {
 
               {/* Active Radar Triggers */}
               <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2.5">
-                  Automated Triggers
-                </h4>
+                <div className="flex justify-between items-center mb-2.5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Automated Triggers
+                  </h4>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs">
                     <div className="flex items-center gap-2 text-indigo-700 font-bold text-xs mb-1">
-                      <Wallet size={14} /> Whale Radar (0x Moves)
+                      <Wallet size={14} /> Whale Sniper Alert
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      Instantly alerts on large balance shifts and swaps from tracked target wallets.
+                      Instantly alerts when tracked target wallets buy very new tokens (under 60m old).
                     </p>
                   </div>
 
-                  <div className="p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs">
-                    <div className="flex items-center gap-2 text-emerald-700 font-bold text-xs mb-1">
-                      <Activity size={14} /> RSI Extreme Signals
+                  <div className={`col-span-1 sm:col-span-2 p-3.5 rounded-xl border transition-colors flex flex-col justify-between ${
+                    isCoinScannerEnabled ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200 bg-slate-50 opacity-80'
+                  }`}>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2 font-bold text-xs text-slate-800">
+                          <Activity size={14} className={isCoinScannerEnabled ? 'text-emerald-600' : 'text-slate-400'} /> 
+                          Coin Scanner (RSI & Volume)
+                        </div>
+                        <button 
+                          onClick={handleToggleCoinScanner}
+                          disabled={isSettingScanner}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
+                            isCoinScannerEnabled ? 'bg-emerald-500' : 'bg-slate-300'
+                          } ${isSettingScanner ? 'opacity-50' : ''}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                            isCoinScannerEnabled ? 'translate-x-4.5' : 'translate-x-1'
+                          }`} />
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Scans tracked coins for RSI extremes (&lt;30 or &gt;70) and 24h volume explosions. 
+                        <strong className="block mt-1 text-slate-600">Turn OFF to prioritize Vercel execution time for Whale Sniper.</strong>
+                      </p>
                     </div>
-                    <p className="text-[11px] text-slate-500">
-                      Dispatches alerts when tracked coins hit RSI &lt; 30 (Oversold) or &gt; 70 (Overbought).
-                    </p>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs">
-                    <div className="flex items-center gap-2 text-purple-700 font-bold text-xs mb-1">
-                      <TrendingUp size={14} /> Volume Explosion
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      Monitors 24h DEX volume surges exceeding $1M or abnormal liquidity influx.
-                    </p>
                   </div>
                 </div>
               </div>
