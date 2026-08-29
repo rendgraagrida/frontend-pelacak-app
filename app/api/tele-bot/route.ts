@@ -375,14 +375,27 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true });
       }
 
-      if (incomingText.startsWith('/search')) {
-        const parts = incomingText.split(' ');
+      const trimmedText = incomingText.trim();
+      const isRawAddress = /^0x[a-fA-F0-9]{40}$/.test(trimmedText) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmedText);
+
+      let isSearchCommand = false;
+      let addressToSearch = '';
+
+      if (trimmedText.startsWith('/search')) {
+        const parts = trimmedText.split(' ');
         if (parts.length < 2) {
           await sendTelegramMessage(`ℹ️ <b>Usage:</b> /search &lt;contract_address&gt;`, { chatId: fromChatId });
           return NextResponse.json({ ok: true });
         }
+        isSearchCommand = true;
+        addressToSearch = parts[1].trim();
+      } else if (isRawAddress && !trimmedText.includes(' ')) {
+        isSearchCommand = true;
+        addressToSearch = trimmedText;
+      }
 
-        const address = parts[1].trim();
+      if (isSearchCommand) {
+        const address = addressToSearch;
         try {
           const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${address}`);
           if (!res.ok) throw new Error('API Error');
